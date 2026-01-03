@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeu à gratter</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #222;
+    font-family: Arial, sans-serif;
+    flex-direction: column;
+    gap: 10px;
+    color: white;
+  }
+  #tries {
+    font-size: 18px;
+    font-weight: bold;
+  }
+  canvas {
+    width: 90vw;
+    max-width: 400px;
+    aspect-ratio: 1/1;
+    touch-action: none;
+    border-radius: 10px;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<div id="tries">ESSAIS : 0</div>
+<canvas id="scratchCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById("scratchCanvas");
+const ctx = canvas.getContext("2d");
+const triesDisplay = document.getElementById("tries");
+
+canvas.width = canvas.offsetWidth;
+canvas.height = canvas.offsetHeight;
+
+const image = new Image();
+image.src = "Imprim.png"; 
+// ⚠️ Ici, dans la vraie version finale, cette ligne contiendra TOUT le Base64 de ta photo.
+// (Je vais te l'envoyer juste après dans un message séparé car il est très long)
+
+image.onload = () => {
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'destination-out';
+};
+
+function scratch(x, y) {
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+let isDrawing = false;
+let tries = 0;
+
+canvas.addEventListener('mousedown', () => {
+  if (!isDrawing) {
+    tries++;
+    triesDisplay.textContent = "ESSAIS : " + tries;
+  }
+  isDrawing = true;
+});
+canvas.addEventListener('mouseup', () => isDrawing = false);
+canvas.addEventListener('mousemove', (e) => {
+  if (isDrawing) scratch(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener('touchstart', (e) => {
+  if (!isDrawing) {
+    tries++;
+    triesDisplay.textContent = "ESSAIS : " + tries;
+  }
+  isDrawing = true;
+  const rect = canvas.getBoundingClientRect();
+  scratch(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+});
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (isDrawing) {
+    const rect = canvas.getBoundingClientRect();
+    scratch(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => isDrawing = false);
+</script>
+
+</body>
+</html>
