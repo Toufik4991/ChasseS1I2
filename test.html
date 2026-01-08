@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Jeu à gratter</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #e0e0e0; 
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 300px;  
+            height: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            /* L'IMAGE DU DESSOUS (Celle qu'on découvre) */
+            background-image: url('imprim.jpg'); 
+            background-size: cover;
+            background-position: center;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            touch-action: none; 
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="scratchCard"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('scratchCard');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+        
+        let isDrawing = false;
+        
+        // --- RÉGLAGE TAILLE DU PINCEAU ---
+        // Divisé par 2 comme demandé (10 pixels de rayon)
+        const brushRadius = 10; 
+
+        // Chargement de l'image DU DESSUS (Celle qu'on gratte)
+        const topImage = new Image();
+        topImage.src = 'IMG1.jpeg'; 
+
+        topImage.onload = function() {
+            resizeCanvas();
+        };
+
+        function resizeCanvas() {
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            
+            // On dessine l'image IMG1.jpeg sur toute la surface du canvas
+            ctx.drawImage(topImage, 0, 0, canvas.width, canvas.height);
+        }
+
+        function scratch(x, y) {
+            // "destination-out" crée la transparence là où on passe le pinceau
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- GESTION DES ÉVÉNEMENTS (SOURIS & TACTILE) ---
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches && e.touches.length > 0) {
+                return {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                };
+            }
+            return {
+                x: e.offsetX,
+                y: e.offsetY
+            };
+        }
+
+        const startDrawing = (e) => {
+            isDrawing = true;
+            const pos = getPointerPos(e);
+            scratch(pos.x, pos.y);
+        };
+
+        const moveDrawing = (e) => {
+            if (!isDrawing) return;
+            if (e.cancelable) e.preventDefault();
+            const pos = getPointerPos(e);
+            scratch(pos.x, pos.y);
+        };
+
+        const stopDrawing = () => isDrawing = false;
+
+        // Souris
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', moveDrawing);
+        window.addEventListener('mouseup', stopDrawing);
+
+        // Tactile
+        canvas.addEventListener('touchstart', startDrawing, { passive: false });
+        canvas.addEventListener('touchmove', moveDrawing, { passive: false });
+        window.addEventListener('touchend', stopDrawing);
+
+    </script>
+</body>
+</html>
