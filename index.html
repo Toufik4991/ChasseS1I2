@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Jeu à gratter</title>
+    <title>L'Énigme du Voile</title>
     <style>
         body {
             display: flex;
@@ -11,35 +11,65 @@
             align-items: center;
             height: 100vh;
             margin: 0;
-            background-color: #e0e0e0; 
-            font-family: Arial, sans-serif;
+            background-color: #050505;
+            font-family: 'Segoe UI', sans-serif;
             overflow: hidden;
         }
 
         #game-container {
             position: relative;
             width: 300px;  
-            height: 400px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            
-            /* CORRECTION ICI : Imprim.jpg avec un I majuscule */
+            height: 420px;
             background-image: url('Imprim.jpg'); 
             background-size: cover;
             background-position: center;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.9);
+            overflow: hidden;
         }
 
         canvas {
             position: absolute;
-            top: 0;
-            left: 0;
+            top: 0; left: 0;
             touch-action: none; 
-            cursor: crosshair;
+            cursor: pointer;
+            transition: filter 0.3s;
+        }
+
+        /* Particule lumineuse qui suit le doigt */
+        #cursor-glow {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+            pointer-events: none;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 100;
+        }
+
+        #hint-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.2);
+            font-size: 14px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            pointer-events: none;
+            text-align: center;
+            width: 100%;
         }
     </style>
 </head>
 <body>
 
+    <div id="cursor-glow"></div>
+
     <div id="game-container">
+        <div id="hint-text">Dissipez la brume...</div>
         <canvas id="scratchCard"></canvas>
     </div>
 
@@ -47,64 +77,111 @@
         const canvas = document.getElementById('scratchCard');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('game-container');
+        const glow = document.getElementById('cursor-glow');
         
         let isDrawing = false;
-        const brushRadius = 10; 
+        let lastPoint = null;
+        let currentBrush = 4; // Taille initiale très fine (indice subtil)
+        let opacity = 1;
 
         const topImage = new Image();
-        /* VERIFICATION ICI : IMG1.jpeg en majuscules */
         topImage.src = 'IMG1.jpeg'; 
 
         topImage.onload = function() {
-            resizeCanvas();
-        };
-
-        function resizeCanvas() {
             canvas.width = container.offsetWidth;
             canvas.height = container.offsetHeight;
+            
+            // Étape 1 : Dessiner l'image de couverture
             ctx.drawImage(topImage, 0, 0, canvas.width, canvas.height);
-        }
+            
+            // Étape 2 : Appliquer l'effet de "Brouillard" (un voile gris bleuté profond)
+            ctx.fillStyle = "rgba(20, 25, 35, 0.85)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Étape 3 : Ajouter une texture de grain pour le réalisme
+            ctx.fillStyle = "rgba(255,255,255,0.03)";
+            for(let i=0; i<1000; i++) {
+                ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 1, 1);
+            }
+        };
 
         function scratch(x, y) {
             ctx.globalCompositeOperation = 'destination-out';
-            ctx.beginPath();
-            ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
-            ctx.fill();
-        }
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            
+            // ÉVOLUTION : La brosse s'élargit progressivement au fur et à mesure du mouvement
+            if (currentBrush < 35) currentBrush += 0.4;
+            
+            ctx.lineWidth = currentBrush;
 
-        function getPointerPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            if (e.touches && e.touches.length > 0) {
-                return {
-                    x: e.touches[0].clientX - rect.left,
-                    y: e.touches[0].clientY - rect.top
-                };
+            if (lastPoint) {
+                ctx.beginPath();
+                ctx.moveTo(lastPoint.x, lastPoint.y);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(x, y, currentBrush/2, 0, Math.PI * 2);
+                ctx.fill();
             }
-            return { x: e.offsetX, y: e.offsetY };
+            lastPoint = { x, y };
+
+            // Vérifier si c'est presque fini pour l'effet de fondu final
+            if (Math.random() > 0.98) checkProgress();
         }
 
-        const startDrawing = (e) => {
+        function checkProgress() {
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let count = 0;
+            for (let i = 3; i < data.length; i += 40) { // On check un pixel sur 10 pour la perf
+                if (data[i] === 0) count++;
+            }
+            if (count > (data.length / 40) * 0.5) {
+                canvas.style.opacity = '0'; // Disparition magique
+                setTimeout(() => canvas.style.display = 'none', 1000);
+            }
+        }
+
+        function handlePointer(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            // Déplacer la particule de lumière
+            glow.style.display = 'block';
+            glow.style.left = clientX + 'px';
+            glow.style.top = clientY + 'px';
+
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        const start = (e) => {
             isDrawing = true;
-            const pos = getPointerPos(e);
+            const pos = handlePointer(e);
             scratch(pos.x, pos.y);
         };
 
-        const moveDrawing = (e) => {
+        const move = (e) => {
+            const pos = handlePointer(e);
             if (!isDrawing) return;
             if (e.cancelable) e.preventDefault();
-            const pos = getPointerPos(e);
             scratch(pos.x, pos.y);
         };
 
-        const stopDrawing = () => isDrawing = false;
+        const stop = () => {
+            isDrawing = false;
+            lastPoint = null;
+            glow.style.display = 'none';
+        };
 
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', moveDrawing);
-        window.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('touchstart', startDrawing, { passive: false });
-        canvas.addEventListener('touchmove', moveDrawing, { passive: false });
-        window.addEventListener('touchend', stopDrawing);
-
+        canvas.addEventListener('mousedown', start);
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', stop);
+        
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        window.addEventListener('touchend', stop);
     </script>
 </body>
 </html>
