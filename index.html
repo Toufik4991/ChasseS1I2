@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience Tactile Vibrante</title>
+    <title>Expérience Tactile Précise</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
@@ -13,38 +13,33 @@
 
         #game-container {
             position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); 
+            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND) */
             background-size: cover; background-position: center;
             border-radius: 12px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            filter: blur(25px); /* Flou initial Image 2 */
         }
 
         canvas { position: absolute; top: 0; left: 0; border-radius: 12px; }
-        #canvas-layer-1 { z-index: 2; } 
-        #canvas-layer-top { z-index: 3; }
+        #canvas-layer-1 { z-index: 2; filter: blur(25px); } /* IMAGE 1 */
+        #canvas-layer-top { z-index: 3; } /* VOILE NOIR */
 
         #brush-cursor {
-            position: absolute; 
-            border: 1.5px solid rgba(255,255,255,0.9); 
+            position: absolute; border: 1px solid rgba(255,255,255,0.8); 
             border-radius: 50%; pointer-events: none; 
             transform: translate(-50%, -50%); display: none; 
             z-index: 100; mix-blend-mode: difference;
-            box-shadow: 0 0 10px rgba(255,255,255,0.3);
         }
 
-        /* Animation de tremblement */
         @keyframes shake {
-            0% { margin: 0; }
-            25% { margin: 1px -1px; }
-            50% { margin: -1px 1px; }
-            75% { margin: 1px 1px; }
-            100% { margin: -1px -1px; }
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            25% { transform: translate(-52%, -48%) rotate(1deg); }
+            50% { transform: translate(-48%, -52%) rotate(-1deg); }
+            100% { transform: translate(-50%, -50%) rotate(0deg); }
         }
 
         #flash {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; z-index: 10; pointer-events: none;
-            border-radius: 12px;
         }
         .flash-anim { animation: flash-fade 0.8s ease-out; }
         @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
@@ -75,8 +70,8 @@
     let locked = false; 
     
     const minSize = 2;  
-    const maxSize = 110; 
-    const growth = 0.12; 
+    const maxSize = 120; 
+    const growth = 0.025; // Croissance divisée par 5 pour être ultra lente
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -91,18 +86,38 @@
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
     };
 
-    function checkCompletion(ctx, canvas) {
-        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    function calculateBlur(progress) {
+        // Logique : Très flou (<25%), puis proportionnel jusqu'à 95%
+        if (progress < 0.25) return 25;
+        if (progress > 0.95) return 0;
+        // Règle de trois entre 0.25 (25px) et 0.95 (0px)
+        return 25 * (1 - (progress - 0.25) / 0.70);
+    }
+
+    function updateVisuals() {
+        if (locked) return;
+
+        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        const pixels = currentCtx.getImageData(0, 0, cMid.width, cMid.height).data;
         let clear = 0;
-        const step = 500; 
+        const step = 400; 
         for (let i = 3; i < pixels.length; i += step) {
             if (pixels[i] === 0) clear++;
         }
         const progress = clear / (pixels.length / step);
 
-        if (progress > 0.94) {
-            if (phase === 1) completePhase1();
-            else if (phase === 2) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const blurVal = calculateBlur(progress);
+
+        if (phase === 1) {
+            cMid.style.filter = `blur(${blurVal}px)`;
+            if (progress > 0.95) {
+                completePhase1();
+            }
+        } else {
+            container.style.filter = `blur(${blurVal}px)`;
+            if (progress > 0.95) {
+                ctxMid.clearRect(0, 0, cMid.width, cMid.height);
+            }
         }
     }
 
@@ -116,20 +131,20 @@
             flash.classList.remove('flash-anim');
             cTop.style.display = 'none';
             phase = 2;
-            setTimeout(() => { locked = false; }, 4200); 
+            cMid.style.filter = "blur(0px)"; // Image 1 devient nette pour servir de base
+            setTimeout(() => { locked = false; }, 5000); 
         }, 800);
     }
 
     function scratch(x, y) {
         if (locked) return;
-        
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
 
         if (brushSize < maxSize) brushSize += growth;
         
-        // Appliquer tremblement si le pinceau est assez gros (ex: > 30px)
-        if (brushSize > 30) {
-            cursor.style.animation = `shake ${0.2 / (brushSize/50)}s infinite`;
+        // Tremblement
+        if (brushSize > 25) {
+            cursor.style.animation = `shake 0.1s infinite`;
         } else {
             cursor.style.animation = 'none';
         }
@@ -153,7 +168,7 @@
         }
         lastPoint = { x, y };
 
-        if (Math.random() > 0.96) checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
+        if (Math.random() > 0.9) updateVisuals();
     }
 
     const onStart = (e) => {
