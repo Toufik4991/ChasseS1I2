@@ -3,42 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>L'Énigme du Double Voile</title>
+    <title>Expérience de Grattage Séquentiel</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
-            height: 100vh; margin: 0; background-color: #000;
-            overflow: hidden; touch-action: none;
+            height: 100vh; margin: 0; background-color: #050505;
+            overflow: hidden; touch-action: none; font-family: sans-serif;
         }
 
         #game-container {
             position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND) */
+            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND FINAL) */
             background-size: cover; background-position: center;
-            border-radius: 8px; 
-            filter: blur(30px); /* Image 2 commence très floue */
-            transition: filter 0.2s linear;
+            border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        canvas { position: absolute; top: 0; left: 0; }
-        #canvas-layer-1 { z-index: 2; } /* IMAGE 1 (NETTE) */
-        #canvas-layer-top { z-index: 3; } /* VOILE NOIR */
+        canvas { position: absolute; top: 0; left: 0; border-radius: 12px; }
+        #canvas-layer-1 { z-index: 2; } /* Image 1 */
+        #canvas-layer-top { z-index: 3; } /* Noir */
 
+        /* Curseur visuel */
+        #brush-cursor {
+            position: absolute; border: 2px solid white; border-radius: 50%;
+            pointer-events: none; transform: translate(-50%, -50%);
+            display: none; z-index: 100; mix-blend-mode: difference;
+        }
+
+        /* Flash blanc */
         #flash {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; z-index: 10; pointer-events: none;
+            border-radius: 12px;
         }
-
-        .flash-anim { animation: flash-effect 0.7s ease-out; }
-        @keyframes flash-effect {
-            0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; }
-        }
+        .flash-anim { animation: flash-fade 0.8s ease-out; }
+        @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="flash"></div>
+    <div id="brush-cursor"></div>
     <canvas id="canvas-layer-1"></canvas>
     <canvas id="canvas-layer-top"></canvas>
 </div>
@@ -50,124 +55,137 @@
     const cMid = document.getElementById('canvas-layer-1');
     const ctxMid = cMid.getContext('2d');
     const flash = document.getElementById('flash');
+    const cursor = document.getElementById('brush-cursor');
 
     let isDrawing = false;
     let lastPoint = null;
-    let brushSize = 4;
-    let phase = 1; 
-    let isCoolingDown = false;
+    let brushSize = 10;
+    let phase = 1; // 1 = Gratter Noir, 2 = Gratter Image 1
+    let locked = false; // Bloqueur de 5 secondes
     
-    const growthSpeed = 0.22; 
-    const minBrush = 4;
-    const maxBrush = 85;
+    const minSize = 10;
+    const maxSize = 80;
+    const growth = 0.5; // Vitesse de croissance du rond
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
 
-    img1.onload = function() {
+    img1.onload = () => {
         [cTop, cMid].forEach(c => { 
             c.width = container.offsetWidth; 
             c.height = container.offsetHeight; 
         });
         
-        // Image 1 dessinée sans aucun filtre (directement nette)
+        // Phase 1 : Image 1 est cachée sous le noir
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-        
-        // Voile noir opaque
-        ctxTop.fillStyle = "#000000";
+        ctxTop.fillStyle = "black";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
     };
 
-    function updateBlurLevels() {
-        if (isCoolingDown) return;
-
-        // On n'analyse que le calque actif
-        const activeCtx = (phase === 1) ? ctxTop : ctxMid;
-        const pixels = activeCtx.getImageData(0, 0, cMid.width, cMid.height).data;
-        
-        let transparent = 0;
-        const step = 250; 
-        for (let i = 3; i < pixels.length; i += step) { 
-            if (pixels[i] === 0) transparent++; 
+    function checkCompletion(ctx, canvas) {
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let clear = 0;
+        for (let i = 3; i < pixels.length; i += 400) {
+            if (pixels[i] === 0) clear++;
         }
-        
-        const progress = transparent / (pixels.length / step);
-        const remaining = 1 - progress;
+        const progress = clear / (pixels.length / 400);
 
-        if (phase === 1) {
-            // Pas de changement de flou ici, juste détection de fin
-            if (progress > 0.96) {
-                triggerFlash();
-                phase = 2;
-                isCoolingDown = true;
-                cTop.style.display = 'none';
-                setTimeout(() => { isCoolingDown = false; }, 5000);
+        // Si 95% est gratté : On finit proprement
+        if (progress > 0.95) {
+            if (phase === 1) {
+                completePhase1();
+            } else if (phase === 2) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
-        } else {
-            // Phase 2 : Le flou du FOND diminue selon le grattage de l'IMAGE 1
-            const blurVal = Math.max(0, remaining * 30);
-            container.style.filter = `blur(${blurVal}px)`;
         }
     }
 
-    function triggerFlash() {
+    function completePhase1() {
+        locked = true;
         flash.classList.add('flash-anim');
-        setTimeout(() => flash.classList.remove('flash-anim'), 700);
+        ctxTop.clearRect(0, 0, cTop.width, cTop.height); // Nettoie le noir
+        
+        setTimeout(() => {
+            flash.classList.remove('flash-anim');
+            cTop.style.display = 'none'; // Détruit la couche noire
+            phase = 2; // On peut maintenant gratter l'image 1
+            setTimeout(() => { locked = false; }, 4200); // 5s total avec le flash
+        }, 800);
     }
 
     function scratch(x, y) {
+        if (locked) return;
+        
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        const currentCanvas = (phase === 1) ? cTop : cMid;
 
-        if (brushSize < maxBrush) brushSize += growthSpeed;
+        // Croissance du pinceau
+        if (brushSize < maxSize) brushSize += growth;
+        
+        // Mise à jour curseur visuel
+        cursor.style.width = brushSize + 'px';
+        cursor.style.height = brushSize + 'px';
+        cursor.style.left = x + 'px';
+        cursor.style.top = y + 'px';
+        cursor.style.display = 'block';
 
         currentCtx.globalCompositeOperation = 'destination-out';
-        currentCtx.lineJoin = 'round'; 
+        currentCtx.lineJoin = 'round';
         currentCtx.lineCap = 'round';
         currentCtx.lineWidth = brushSize;
 
         if (lastPoint) {
-            currentCtx.beginPath(); 
+            currentCtx.beginPath();
             currentCtx.moveTo(lastPoint.x, lastPoint.y);
-            currentCtx.lineTo(x, y); 
+            currentCtx.lineTo(x, y);
             currentCtx.stroke();
-        } else {
-            currentCtx.beginPath(); 
-            currentCtx.arc(x, y, brushSize/2, 0, Math.PI*2); 
-            currentCtx.fill();
         }
         lastPoint = { x, y };
-        updateBlurLevels();
+
+        // Vérification automatique toutes les 10 actions
+        if (Math.random() > 0.9) checkCompletion(currentCtx, currentCanvas);
     }
 
-    const handleInput = (e) => {
-        if (!isDrawing) return;
-        if (e.cancelable) e.preventDefault();
+    function getPos(e) {
         const rect = container.getBoundingClientRect();
         const pos = e.touches ? e.touches[0] : e;
-        const x = pos.clientX - rect.left;
-        const y = pos.clientY - rect.top;
-        scratch(x, y);
+        return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
+    }
+
+    const onStart = (e) => {
+        if (locked) return;
+        isDrawing = true;
+        brushSize = minSize;
+        const p = getPos(e);
+        lastPoint = p;
+        scratch(p.x, p.y);
     };
 
-    const start = (e) => { 
-        isDrawing = true; 
-        brushSize = minBrush; 
-        lastPoint = null; 
-        handleInput(e); 
-    };
-    
-    const stop = () => { 
-        isDrawing = false; 
-        lastPoint = null; 
-        brushSize = minBrush; 
+    const onMove = (e) => {
+        if (!isDrawing || locked) return;
+        if (e.cancelable) e.preventDefault();
+        const p = getPos(e);
+        scratch(p.x, p.y);
     };
 
-    container.addEventListener('mousedown', start);
-    container.addEventListener('touchstart', start, {passive: false});
-    window.addEventListener('mousemove', handleInput);
-    window.addEventListener('touchmove', handleInput, {passive: false});
-    window.addEventListener('mouseup', stop);
-    window.addEventListener('touchend', stop);
+    const onStop = () => {
+        isDrawing = false;
+        lastPoint = null;
+        cursor.style.display = 'none';
+        if (!locked) {
+            const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+            const currentCanvas = (phase === 1) ? cTop : cMid;
+            checkCompletion(currentCtx, currentCanvas);
+        }
+    };
+
+    container.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onStop);
+
+    container.addEventListener('touchstart', onStart, {passive: false});
+    window.addEventListener('touchmove', onMove, {passive: false});
+    window.addEventListener('touchend', onStop);
 
 </script>
 </body>
