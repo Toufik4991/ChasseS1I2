@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Double Grattage Mystère</title>
+    <title>Double Grattage : Révélation</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
@@ -20,10 +20,9 @@
 
         canvas { position: absolute; top: 0; left: 0; transition: filter 0.3s ease, opacity 0.5s ease; }
         
-        #canvas-layer-1 { z-index: 2; } /* Image 1 */
-        #canvas-layer-top { z-index: 3; } /* Voile Noir */
+        #canvas-layer-1 { z-index: 2; } 
+        #canvas-layer-top { z-index: 3; }
 
-        /* Effet de Flash */
         #flash {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; z-index: 10; pointer-events: none;
@@ -54,11 +53,11 @@
     let isDrawing = false;
     let lastPoint = null;
     let brushSize = 4;
-    let phase = 1; // Phase 1: Voile Noir | Phase 2: Image 1
+    let phase = 1; 
     
     const growthSpeed = 0.15;
     const minBrush = 4;
-    const maxBrush = 60;
+    const maxBrush = 65;
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -77,11 +76,15 @@
     function updateVisuals(percent) {
         const rev = 1 - percent;
         if (phase === 1) {
+            // Phase 1 : Tout est flou
             cMid.style.filter = `blur(${rev * 15}px)`;
-            cTop.style.opacity = rev > 0.05 ? rev : 0;
-            container.style.filter = `blur(20px)`; // Fond reste flou
+            cTop.style.opacity = rev;
+            container.style.filter = `blur(20px)`; 
         } else {
+            // Phase 2 : Image 1 est NETTE (flash passé), on floute le fond (Image 2)
+            cMid.style.filter = `blur(0px)`; 
             container.style.filter = `blur(${rev * 20}px)`;
+            cTop.style.display = 'none';
         }
     }
 
@@ -94,38 +97,40 @@
         const targetCtx = (phase === 1) ? ctxTop : ctxMid;
         const pixels = targetCtx.getImageData(0, 0, cMid.width, cMid.height).data;
         let transparent = 0;
-        for (let i = 3; i < pixels.length; i += 100) { if (pixels[i] === 0) transparent++; }
-        const progress = transparent / (pixels.length / 100);
+        // Échantillonnage pour performance
+        for (let i = 3; i < pixels.length; i += 120) { if (pixels[i] === 0) transparent++; }
+        const progress = transparent / (pixels.length / 120);
 
         if (phase === 1 && progress > 0.96) {
             triggerFlash();
             phase = 2;
-            cTop.style.display = 'none'; // Supprime le voile noir
-            cMid.style.filter = 'blur(0px)'; // Image 1 devient nette
-            updateVisuals(0); // Reset pour le fond (phase 2)
+            updateVisuals(0); // Reset le calcul pour le grattage de l'image 2
         } else {
             updateVisuals(progress);
         }
     }
 
     function scratch(x, y) {
+        // En phase 1, on gratte le noir. En phase 2, on gratte l'Image 1.
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        // En phase 1, on peut aussi gratter la couche 1 en même temps pour préparer le terrain
-        const contexts = (phase === 1) ? [ctxTop, ctxMid] : [ctxMid];
 
         if (brushSize < maxBrush) brushSize += growthSpeed;
 
-        contexts.forEach(ctx => {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-            ctx.lineWidth = brushSize;
-            if (lastPoint) {
-                ctx.beginPath(); ctx.moveTo(lastPoint.x, lastPoint.y);
-                ctx.lineTo(x, y); ctx.stroke();
-            } else {
-                ctx.beginPath(); ctx.arc(x, y, brushSize/2, 0, Math.PI*2); ctx.fill();
-            }
-        });
+        currentCtx.globalCompositeOperation = 'destination-out';
+        currentCtx.lineJoin = 'round'; 
+        currentCtx.lineCap = 'round';
+        currentCtx.lineWidth = brushSize;
+
+        if (lastPoint) {
+            currentCtx.beginPath(); 
+            currentCtx.moveTo(lastPoint.x, lastPoint.y);
+            currentCtx.lineTo(x, y); 
+            currentCtx.stroke();
+        } else {
+            currentCtx.beginPath(); 
+            currentCtx.arc(x, y, brushSize/2, 0, Math.PI*2); 
+            currentCtx.fill();
+        }
         lastPoint = { x, y };
     }
 
@@ -140,13 +145,26 @@
         if (Math.random() > 0.9) checkProgress();
     };
 
-    const start = (e) => { isDrawing = true; brushSize = minBrush; lastPoint = null; handleInput(e); };
-    const stop = () => { isDrawing = false; lastPoint = null; brushSize = minBrush; checkProgress(); };
+    const start = (e) => { 
+        isDrawing = true; 
+        brushSize = minBrush; 
+        lastPoint = null; 
+        handleInput(e); 
+    };
+    
+    const stop = () => { 
+        isDrawing = false; 
+        lastPoint = null; 
+        brushSize = minBrush; 
+        checkProgress(); 
+    };
 
+    // Listeners sur les deux couches pour garantir la capture du toucher
     [cTop, cMid].forEach(c => {
         c.addEventListener('mousedown', start);
         c.addEventListener('touchstart', start, {passive: false});
     });
+
     window.addEventListener('mousemove', handleInput);
     window.addEventListener('touchmove', handleInput, {passive: false});
     window.addEventListener('mouseup', stop);
