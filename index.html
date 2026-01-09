@@ -3,51 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Système de Flou Dynamique</title>
+    <title>Double Grattage Mystère</title>
     <style>
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #000;
-            overflow: hidden;
-            touch-action: none;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; margin: 0; background-color: #000;
+            overflow: hidden; touch-action: none;
         }
 
         #game-container {
-            position: relative;
-            width: 320px;
-            height: 450px;
-            /* IMAGE 2 (FOND) */
+            position: relative; width: 320px; height: 450px;
             background-image: url('Imprim.jpg');
-            background-size: cover;
-            background-position: center;
-            border-radius: 8px;
-            transition: filter 0.2s ease;
+            background-size: cover; background-position: center;
+            border-radius: 8px; transition: filter 0.3s ease;
         }
 
-        /* IMAGE 1 (MILIEU) */
-        #canvas-layer-1 {
-            position: absolute;
-            top: 0; left: 0;
-            z-index: 2;
-            transition: filter 0.2s ease;
+        canvas { position: absolute; top: 0; left: 0; transition: filter 0.3s ease, opacity 0.5s ease; }
+        
+        #canvas-layer-1 { z-index: 2; } /* Image 1 */
+        #canvas-layer-top { z-index: 3; } /* Voile Noir */
+
+        /* Effet de Flash */
+        #flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: white; opacity: 0; z-index: 10; pointer-events: none;
         }
 
-        /* VOILE NOIR (DESSUS) */
-        #canvas-layer-top {
-            position: absolute;
-            top: 0; left: 0;
-            z-index: 3;
-            transition: opacity 0.2s ease;
+        .flash-anim { animation: flash-effect 0.6s ease-out; }
+        @keyframes flash-effect {
+            0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; }
         }
     </style>
 </head>
 <body>
 
 <div id="game-container">
+    <div id="flash"></div>
     <canvas id="canvas-layer-1"></canvas>
     <canvas id="canvas-layer-top"></canvas>
 </div>
@@ -58,115 +49,107 @@
     const ctxTop = cTop.getContext('2d');
     const cMid = document.getElementById('canvas-layer-1');
     const ctxMid = cMid.getContext('2d');
+    const flash = document.getElementById('flash');
 
     let isDrawing = false;
     let lastPoint = null;
     let brushSize = 4;
+    let phase = 1; // Phase 1: Voile Noir | Phase 2: Image 1
+    
+    const growthSpeed = 0.15;
     const minBrush = 4;
     const maxBrush = 60;
-    const growthSpeed = 0.12; // Agrandissement lent
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
 
     img1.onload = function() {
-        [cTop, cMid].forEach(canvas => {
-            canvas.width = container.offsetWidth;
-            canvas.height = container.offsetHeight;
+        [cTop, cMid].forEach(c => { 
+            c.width = container.offsetWidth; 
+            c.height = container.offsetHeight; 
         });
-
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
         ctxTop.fillStyle = "#000000";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
-        
-        updateBlur(0); // Initialisation à 0% gratté
+        updateVisuals(0);
     };
 
-    function updateBlur(percent) {
-        // percent va de 0 (rien gratté) à 1 (tout gratté)
-        const reversePercent = 1 - percent; 
-        
-        // Calcul des intensités de flou (Max flou : 20px pour le fond, 15px pour img1)
-        const blurFond = (reversePercent * 20).toFixed(1);
-        const blurImg1 = (reversePercent * 15).toFixed(1);
-        const opacityTop = (reversePercent).toFixed(2);
-
-        container.style.filter = `blur(${blurFond}px)`;
-        cMid.style.filter = `blur(${blurImg1}px)`;
-        cTop.style.opacity = opacityTop;
-    }
-
-    function calculateProgress() {
-        // On analyse la couche du milieu pour savoir ce qui a été retiré
-        const pixels = ctxMid.getImageData(0, 0, cMid.width, cMid.height).data;
-        let transparent = 0;
-        // On saute des pixels pour optimiser les performances (i += 4 * pas)
-        for (let i = 3; i < pixels.length; i += 80) {
-            if (pixels[i] === 0) transparent++;
+    function updateVisuals(percent) {
+        const rev = 1 - percent;
+        if (phase === 1) {
+            cMid.style.filter = `blur(${rev * 15}px)`;
+            cTop.style.opacity = rev > 0.05 ? rev : 0;
+            container.style.filter = `blur(20px)`; // Fond reste flou
+        } else {
+            container.style.filter = `blur(${rev * 20}px)`;
         }
-        const totalSampled = pixels.length / 80;
-        updateBlur(transparent / totalSampled);
     }
 
-    function scratch(x, y, ctx) {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
+    function triggerFlash() {
+        flash.classList.add('flash-anim');
+        setTimeout(() => flash.classList.remove('flash-anim'), 600);
+    }
+
+    function checkProgress() {
+        const targetCtx = (phase === 1) ? ctxTop : ctxMid;
+        const pixels = targetCtx.getImageData(0, 0, cMid.width, cMid.height).data;
+        let transparent = 0;
+        for (let i = 3; i < pixels.length; i += 100) { if (pixels[i] === 0) transparent++; }
+        const progress = transparent / (pixels.length / 100);
+
+        if (phase === 1 && progress > 0.96) {
+            triggerFlash();
+            phase = 2;
+            cTop.style.display = 'none'; // Supprime le voile noir
+            cMid.style.filter = 'blur(0px)'; // Image 1 devient nette
+            updateVisuals(0); // Reset pour le fond (phase 2)
+        } else {
+            updateVisuals(progress);
+        }
+    }
+
+    function scratch(x, y) {
+        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        // En phase 1, on peut aussi gratter la couche 1 en même temps pour préparer le terrain
+        const contexts = (phase === 1) ? [ctxTop, ctxMid] : [ctxMid];
 
         if (brushSize < maxBrush) brushSize += growthSpeed;
-        ctx.lineWidth = brushSize;
 
-        if (lastPoint) {
-            ctx.beginPath();
-            ctx.moveTo(lastPoint.x, lastPoint.y);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-        } else {
-            ctx.beginPath();
-            ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        contexts.forEach(ctx => {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+            ctx.lineWidth = brushSize;
+            if (lastPoint) {
+                ctx.beginPath(); ctx.moveTo(lastPoint.x, lastPoint.y);
+                ctx.lineTo(x, y); ctx.stroke();
+            } else {
+                ctx.beginPath(); ctx.arc(x, y, brushSize/2, 0, Math.PI*2); ctx.fill();
+            }
+        });
+        lastPoint = { x, y };
     }
 
-    function handlePointer(e) {
+    const handleInput = (e) => {
         if (!isDrawing) return;
         if (e.cancelable) e.preventDefault();
-
-        const rect = cTop.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
-
-        scratch(x, y, ctxTop);
-        scratch(x, y, ctxMid);
-
-        lastPoint = { x, y };
-        
-        // On calcule la progression toutes les quelques frames
-        if (Math.random() > 0.9) calculateProgress();
-    }
-
-    const start = (e) => {
-        isDrawing = true;
-        brushSize = minBrush;
-        lastPoint = null;
-        handlePointer(e);
+        const rect = cMid.getBoundingClientRect();
+        const pos = e.touches ? e.touches[0] : e;
+        const x = pos.clientX - rect.left;
+        const y = pos.clientY - rect.top;
+        scratch(x, y);
+        if (Math.random() > 0.9) checkProgress();
     };
 
-    const stop = () => {
-        isDrawing = false;
-        lastPoint = null;
-        brushSize = minBrush;
-        calculateProgress(); // Calcul final au relâchement
-    };
+    const start = (e) => { isDrawing = true; brushSize = minBrush; lastPoint = null; handleInput(e); };
+    const stop = () => { isDrawing = false; lastPoint = null; brushSize = minBrush; checkProgress(); };
 
-    cTop.addEventListener('mousedown', start);
-    window.addEventListener('mousemove', handlePointer);
+    [cTop, cMid].forEach(c => {
+        c.addEventListener('mousedown', start);
+        c.addEventListener('touchstart', start, {passive: false});
+    });
+    window.addEventListener('mousemove', handleInput);
+    window.addEventListener('touchmove', handleInput, {passive: false});
     window.addEventListener('mouseup', stop);
-
-    cTop.addEventListener('touchstart', start, { passive: false });
-    cTop.addEventListener('touchmove', handlePointer, { passive: false });
     window.addEventListener('touchend', stop);
 
 </script>
