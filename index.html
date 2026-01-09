@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Le Mystère des Deux Voiles</title>
+    <title>Le Mystère à Double Voile</title>
     <style>
         body {
             display: flex;
@@ -11,159 +11,140 @@
             align-items: center;
             height: 100vh;
             margin: 0;
-            background-color: #020202;
-            font-family: sans-serif;
+            background-color: #000;
             overflow: hidden;
+            touch-action: none;
         }
 
         #game-container {
             position: relative;
-            width: 320px;  
+            width: 320px;
             height: 450px;
-            /* L'image de fond est floue au départ */
-            background-image: url('Imprim.jpg'); 
+            /* IMAGE 2 (FOND) - Floue */
+            background-image: url('Imprim.jpg');
             background-size: cover;
             background-position: center;
-            filter: blur(10px); 
-            border-radius: 10px;
-            transition: filter 2s ease;
+            filter: blur(15px);
+            border-radius: 8px;
         }
 
-        /* Quand on a bien gratté, le fond devient net */
-        #game-container.revealed {
-            filter: blur(0px);
-        }
-
-        canvas {
+        /* IMAGE 1 (MILIEU) - Floue */
+        #canvas-layer-1 {
             position: absolute;
             top: 0; left: 0;
-            touch-action: none; 
-            cursor: crosshair;
-            /* L'image du dessus est aussi floue */
-            filter: blur(6px);
-            transition: opacity 1s ease;
+            z-index: 2;
+            filter: blur(8px);
         }
 
-        #hint {
+        /* VOILE NOIR (DESSUS) - Flou */
+        #canvas-layer-top {
             position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            color: rgba(255,255,255,0.4);
-            font-size: 11px;
-            letter-spacing: 2px;
-            pointer-events: none;
+            top: 0; left: 0;
+            z-index: 3;
+            filter: blur(4px);
         }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <canvas id="scratchCard"></canvas>
-        <div id="hint">Maintenez pour voir plus clair...</div>
-    </div>
+<div id="game-container">
+    <canvas id="canvas-layer-1"></canvas>
+    <canvas id="canvas-layer-top"></canvas>
+</div>
 
-    <script>
-        const canvas = document.getElementById('scratchCard');
-        const ctx = canvas.getContext('2d');
-        const container = document.getElementById('game-container');
-        
-        let isDrawing = false;
-        let lastPoint = null;
-        let brushSize = 4; // Taille initiale (tout petit pixel)
-        const minBrush = 4;
-        const maxBrush = 45;
+<script>
+    const container = document.getElementById('game-container');
+    const cTop = document.getElementById('canvas-layer-top');
+    const ctxTop = cTop.getContext('2d');
+    const cMid = document.getElementById('canvas-layer-1');
+    const ctxMid = cMid.getContext('2d');
 
-        const topImage = new Image();
-        topImage.src = 'IMG1.jpeg'; 
+    let isDrawing = false;
+    let lastPoint = null;
+    let brushSize = 4;
+    const minBrush = 4;
+    const maxBrush = 50;
+    const growthSpeed = 0.15; // Agrandissement très lent
 
-        topImage.onload = function() {
+    const img1 = new Image();
+    img1.src = 'IMG1.jpeg';
+
+    img1.onload = function() {
+        [cTop, cMid].forEach(canvas => {
             canvas.width = container.offsetWidth;
             canvas.height = container.offsetHeight;
-            
-            // Dessin de l'image de couverture
-            ctx.drawImage(topImage, 0, 0, canvas.width, canvas.height);
-            
-            // Ajout d'un voile sombre pour cacher le flou de l'image 1
-            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        };
+        });
 
-        function scratch(x, y) {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.lineJoin = 'round';
-            ctx.lineCap = 'round';
-            
-            // LOGIQUE DE GROSSISSEMENT : Plus on gratte sans lâcher, plus ça grossit
-            if (brushSize < maxBrush) {
-                brushSize += 0.8; 
-            }
-            
-            ctx.lineWidth = brushSize;
+        // Setup Layer 1 (Image 1)
+        ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
 
-            if (lastPoint) {
-                ctx.beginPath();
-                ctx.moveTo(lastPoint.x, lastPoint.y);
-                ctx.lineTo(x, y);
-                ctx.stroke();
-            } else {
-                ctx.beginPath();
-                ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            lastPoint = { x, y };
+        // Setup Layer Top (Voile Noir)
+        ctxTop.fillStyle = "#000000";
+        ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+    };
 
-            // Analyse de la progression
-            if (Math.random() > 0.95) checkProgress();
+    function scratch(x, y, ctx) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        if (brushSize < maxBrush) {
+            brushSize += growthSpeed;
         }
 
-        function checkProgress() {
-            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            let total = 0;
-            for (let i = 3; i < data.length; i += 40) {
-                if (data[i] === 0) total++;
-            }
-            // Si on a gratté plus de 40%, on rend le fond net
-            if (total > (data.length / 40) * 0.4) {
-                container.classList.add('revealed');
-                canvas.style.opacity = "0";
-            }
+        ctx.lineWidth = brushSize;
+
+        if (lastPoint) {
+            ctx.beginPath();
+            ctx.moveTo(lastPoint.x, lastPoint.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
+            ctx.fill();
         }
+    }
 
-        function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            const cx = e.touches ? e.touches[0].clientX : e.clientX;
-            const cy = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: cx - rect.left, y: cy - rect.top };
-        }
+    function handlePointer(e) {
+        if (!isDrawing) return;
+        if (e.cancelable) e.preventDefault();
 
-        const start = (e) => {
-            isDrawing = true;
-            brushSize = minBrush; // RÉINITIALISATION à chaque fois que le doigt se pose
-            const pos = getPos(e);
-            scratch(pos.x, pos.y);
-        };
+        const rect = cTop.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
 
-        const move = (e) => {
-            if (!isDrawing) return;
-            if (e.cancelable) e.preventDefault();
-            const pos = getPos(e);
-            scratch(pos.x, pos.y);
-        };
+        // On gratte les deux couches simultanément
+        // Mais comme elles sont superposées, l'effet visuel sera progressif
+        scratch(x, y, ctxTop);
+        scratch(x, y, ctxMid);
 
-        const stop = () => {
-            isDrawing = false;
-            lastPoint = null;
-            brushSize = minBrush; // RÉINITIALISATION quand le doigt se lève
-        };
+        lastPoint = { x, y };
+    }
 
-        canvas.addEventListener('mousedown', start);
-        window.addEventListener('mousemove', move);
-        window.addEventListener('mouseup', stop);
-        
-        canvas.addEventListener('touchstart', start, { passive: false });
-        canvas.addEventListener('touchmove', move, { passive: false });
-        window.addEventListener('touchend', stop);
-    </script>
+    const start = (e) => {
+        isDrawing = true;
+        brushSize = minBrush;
+        lastPoint = null;
+        handlePointer(e);
+    };
+
+    const stop = () => {
+        isDrawing = false;
+        lastPoint = null;
+        brushSize = minBrush;
+    };
+
+    cTop.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', handlePointer);
+    window.addEventListener('mouseup', stop);
+
+    cTop.addEventListener('touchstart', start, { passive: false });
+    cTop.addEventListener('touchmove', handlePointer, { passive: false });
+    window.addEventListener('touchend', stop);
+
+</script>
 </body>
 </html>
