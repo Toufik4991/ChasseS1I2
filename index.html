@@ -3,33 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience de Grattage Séquentiel</title>
+    <title>Expérience Tactile Vibrante</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
             height: 100vh; margin: 0; background-color: #050505;
-            overflow: hidden; touch-action: none; font-family: sans-serif;
+            overflow: hidden; touch-action: none;
         }
 
         #game-container {
             position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND FINAL) */
+            background-image: url('Imprim.jpg'); 
             background-size: cover; background-position: center;
-            border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
         canvas { position: absolute; top: 0; left: 0; border-radius: 12px; }
-        #canvas-layer-1 { z-index: 2; } /* Image 1 */
-        #canvas-layer-top { z-index: 3; } /* Noir */
+        #canvas-layer-1 { z-index: 2; } 
+        #canvas-layer-top { z-index: 3; }
 
-        /* Curseur visuel */
         #brush-cursor {
-            position: absolute; border: 2px solid white; border-radius: 50%;
-            pointer-events: none; transform: translate(-50%, -50%);
-            display: none; z-index: 100; mix-blend-mode: difference;
+            position: absolute; 
+            border: 1.5px solid rgba(255,255,255,0.9); 
+            border-radius: 50%; pointer-events: none; 
+            transform: translate(-50%, -50%); display: none; 
+            z-index: 100; mix-blend-mode: difference;
+            box-shadow: 0 0 10px rgba(255,255,255,0.3);
         }
 
-        /* Flash blanc */
+        /* Animation de tremblement */
+        @keyframes shake {
+            0% { margin: 0; }
+            25% { margin: 1px -1px; }
+            50% { margin: -1px 1px; }
+            75% { margin: 1px 1px; }
+            100% { margin: -1px -1px; }
+        }
+
         #flash {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; z-index: 10; pointer-events: none;
@@ -59,13 +70,13 @@
 
     let isDrawing = false;
     let lastPoint = null;
-    let brushSize = 10;
-    let phase = 1; // 1 = Gratter Noir, 2 = Gratter Image 1
-    let locked = false; // Bloqueur de 5 secondes
+    let brushSize = 2; 
+    let phase = 1; 
+    let locked = false; 
     
-    const minSize = 10;
-    const maxSize = 80;
-    const growth = 0.5; // Vitesse de croissance du rond
+    const minSize = 2;  
+    const maxSize = 110; 
+    const growth = 0.12; 
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -75,8 +86,6 @@
             c.width = container.offsetWidth; 
             c.height = container.offsetHeight; 
         });
-        
-        // Phase 1 : Image 1 est cachée sous le noir
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
         ctxTop.fillStyle = "black";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
@@ -85,31 +94,29 @@
     function checkCompletion(ctx, canvas) {
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let clear = 0;
-        for (let i = 3; i < pixels.length; i += 400) {
+        const step = 500; 
+        for (let i = 3; i < pixels.length; i += step) {
             if (pixels[i] === 0) clear++;
         }
-        const progress = clear / (pixels.length / 400);
+        const progress = clear / (pixels.length / step);
 
-        // Si 95% est gratté : On finit proprement
-        if (progress > 0.95) {
-            if (phase === 1) {
-                completePhase1();
-            } else if (phase === 2) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
+        if (progress > 0.94) {
+            if (phase === 1) completePhase1();
+            else if (phase === 2) ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
     }
 
     function completePhase1() {
         locked = true;
         flash.classList.add('flash-anim');
-        ctxTop.clearRect(0, 0, cTop.width, cTop.height); // Nettoie le noir
+        ctxTop.clearRect(0, 0, cTop.width, cTop.height);
+        cursor.style.display = 'none';
         
         setTimeout(() => {
             flash.classList.remove('flash-anim');
-            cTop.style.display = 'none'; // Détruit la couche noire
-            phase = 2; // On peut maintenant gratter l'image 1
-            setTimeout(() => { locked = false; }, 4200); // 5s total avec le flash
+            cTop.style.display = 'none';
+            phase = 2;
+            setTimeout(() => { locked = false; }, 4200); 
         }, 800);
     }
 
@@ -117,12 +124,16 @@
         if (locked) return;
         
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        const currentCanvas = (phase === 1) ? cTop : cMid;
 
-        // Croissance du pinceau
         if (brushSize < maxSize) brushSize += growth;
         
-        // Mise à jour curseur visuel
+        // Appliquer tremblement si le pinceau est assez gros (ex: > 30px)
+        if (brushSize > 30) {
+            cursor.style.animation = `shake ${0.2 / (brushSize/50)}s infinite`;
+        } else {
+            cursor.style.animation = 'none';
+        }
+
         cursor.style.width = brushSize + 'px';
         cursor.style.height = brushSize + 'px';
         cursor.style.left = x + 'px';
@@ -142,21 +153,16 @@
         }
         lastPoint = { x, y };
 
-        // Vérification automatique toutes les 10 actions
-        if (Math.random() > 0.9) checkCompletion(currentCtx, currentCanvas);
-    }
-
-    function getPos(e) {
-        const rect = container.getBoundingClientRect();
-        const pos = e.touches ? e.touches[0] : e;
-        return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
+        if (Math.random() > 0.96) checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
     }
 
     const onStart = (e) => {
         if (locked) return;
         isDrawing = true;
-        brushSize = minSize;
-        const p = getPos(e);
+        brushSize = minSize; 
+        const rect = container.getBoundingClientRect();
+        const pos = e.touches ? e.touches[0] : e;
+        const p = { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
         lastPoint = p;
         scratch(p.x, p.y);
     };
@@ -164,29 +170,23 @@
     const onMove = (e) => {
         if (!isDrawing || locked) return;
         if (e.cancelable) e.preventDefault();
-        const p = getPos(e);
-        scratch(p.x, p.y);
+        const rect = container.getBoundingClientRect();
+        const pos = e.touches ? e.touches[0] : e;
+        scratch(pos.clientX - rect.left, pos.clientY - rect.top);
     };
 
     const onStop = () => {
         isDrawing = false;
         lastPoint = null;
         cursor.style.display = 'none';
-        if (!locked) {
-            const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-            const currentCanvas = (phase === 1) ? cTop : cMid;
-            checkCompletion(currentCtx, currentCanvas);
-        }
     };
 
     container.addEventListener('mousedown', onStart);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onStop);
-
     container.addEventListener('touchstart', onStart, {passive: false});
     window.addEventListener('touchmove', onMove, {passive: false});
     window.addEventListener('touchend', onStop);
-
 </script>
 </body>
 </html>
