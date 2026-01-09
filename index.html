@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Le Mystère à Double Voile</title>
+    <title>Système de Flou Dynamique</title>
     <style>
         body {
             display: flex;
@@ -20,28 +20,28 @@
             position: relative;
             width: 320px;
             height: 450px;
-            /* IMAGE 2 (FOND) - Floue */
+            /* IMAGE 2 (FOND) */
             background-image: url('Imprim.jpg');
             background-size: cover;
             background-position: center;
-            filter: blur(15px);
             border-radius: 8px;
+            transition: filter 0.2s ease;
         }
 
-        /* IMAGE 1 (MILIEU) - Floue */
+        /* IMAGE 1 (MILIEU) */
         #canvas-layer-1 {
             position: absolute;
             top: 0; left: 0;
             z-index: 2;
-            filter: blur(8px);
+            transition: filter 0.2s ease;
         }
 
-        /* VOILE NOIR (DESSUS) - Flou */
+        /* VOILE NOIR (DESSUS) */
         #canvas-layer-top {
             position: absolute;
             top: 0; left: 0;
             z-index: 3;
-            filter: blur(4px);
+            transition: opacity 0.2s ease;
         }
     </style>
 </head>
@@ -63,8 +63,8 @@
     let lastPoint = null;
     let brushSize = 4;
     const minBrush = 4;
-    const maxBrush = 50;
-    const growthSpeed = 0.15; // Agrandissement très lent
+    const maxBrush = 60;
+    const growthSpeed = 0.12; // Agrandissement lent
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -75,23 +75,45 @@
             canvas.height = container.offsetHeight;
         });
 
-        // Setup Layer 1 (Image 1)
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-
-        // Setup Layer Top (Voile Noir)
         ctxTop.fillStyle = "#000000";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+        
+        updateBlur(0); // Initialisation à 0% gratté
     };
+
+    function updateBlur(percent) {
+        // percent va de 0 (rien gratté) à 1 (tout gratté)
+        const reversePercent = 1 - percent; 
+        
+        // Calcul des intensités de flou (Max flou : 20px pour le fond, 15px pour img1)
+        const blurFond = (reversePercent * 20).toFixed(1);
+        const blurImg1 = (reversePercent * 15).toFixed(1);
+        const opacityTop = (reversePercent).toFixed(2);
+
+        container.style.filter = `blur(${blurFond}px)`;
+        cMid.style.filter = `blur(${blurImg1}px)`;
+        cTop.style.opacity = opacityTop;
+    }
+
+    function calculateProgress() {
+        // On analyse la couche du milieu pour savoir ce qui a été retiré
+        const pixels = ctxMid.getImageData(0, 0, cMid.width, cMid.height).data;
+        let transparent = 0;
+        // On saute des pixels pour optimiser les performances (i += 4 * pas)
+        for (let i = 3; i < pixels.length; i += 80) {
+            if (pixels[i] === 0) transparent++;
+        }
+        const totalSampled = pixels.length / 80;
+        updateBlur(transparent / totalSampled);
+    }
 
     function scratch(x, y, ctx) {
         ctx.globalCompositeOperation = 'destination-out';
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
 
-        if (brushSize < maxBrush) {
-            brushSize += growthSpeed;
-        }
-
+        if (brushSize < maxBrush) brushSize += growthSpeed;
         ctx.lineWidth = brushSize;
 
         if (lastPoint) {
@@ -116,12 +138,13 @@
         const x = clientX - rect.left;
         const y = clientY - rect.top;
 
-        // On gratte les deux couches simultanément
-        // Mais comme elles sont superposées, l'effet visuel sera progressif
         scratch(x, y, ctxTop);
         scratch(x, y, ctxMid);
 
         lastPoint = { x, y };
+        
+        // On calcule la progression toutes les quelques frames
+        if (Math.random() > 0.9) calculateProgress();
     }
 
     const start = (e) => {
@@ -135,6 +158,7 @@
         isDrawing = false;
         lastPoint = null;
         brushSize = minBrush;
+        calculateProgress(); // Calcul final au relâchement
     };
 
     cTop.addEventListener('mousedown', start);
