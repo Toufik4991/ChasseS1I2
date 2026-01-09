@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>L'Énigme Finale</title>
+    <title>L'Énigme des 3 Couches</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
@@ -13,16 +13,19 @@
 
         #game-container {
             position: relative; width: 320px; height: 450px;
+            /* COUCHE 1 : IMAGE DE FOND */
             background-image: url('Imprim.jpg');
             background-size: cover; background-position: center;
             border-radius: 8px; 
-            filter: blur(30px); /* Fond ultra flou au début */
+            filter: blur(30px); /* Très floue au départ */
         }
 
-        canvas { position: absolute; top: 0; left: 0; }
+        canvas { position: absolute; top: 0; left: 0; outline: none; }
         
-        /* On utilise le filtre CSS pour la proportionnalité du flou */
+        /* COUCHE 2 : IMAGE INTERMÉDIAIRE */
         #canvas-layer-1 { z-index: 2; filter: blur(20px); } 
+        
+        /* COUCHE 3 : VOILE NOIR */
         #canvas-layer-top { z-index: 3; }
 
         #flash {
@@ -71,10 +74,10 @@
             c.height = container.offsetHeight; 
         });
         
-        // On dessine l'image 1 normalement (le flou est géré par le CSS au-dessus)
+        // On prépare l'image 1 sur son calque
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
         
-        // Initialisation Voile Noir
+        // On prépare le voile noir sur le calque du dessus
         ctxTop.fillStyle = "#000000";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
     };
@@ -82,38 +85,34 @@
     function updateBlurLevels() {
         if (isCoolingDown) return;
 
-        // On définit quel calque analyser pour calculer la progression
-        const activeCanvas = (phase === 1) ? cTop : cMid;
-        const activeCtx = (phase === 1) ? ctxTop : ctxMid;
-        
-        const pixels = activeCtx.getImageData(0, 0, activeCanvas.width, activeCanvas.height).data;
-        let transparent = 0;
-        const step = 200; 
-
-        for (let i = 3; i < pixels.length; i += step) { 
-            if (pixels[i] === 0) transparent++; 
-        }
-        
-        const progress = transparent / (pixels.length / step);
-        const remaining = 1 - progress;
-
         if (phase === 1) {
-            // L'Image 1 devient nette selon le grattage du NOIR
-            const blurVal = Math.max(0, remaining * 20);
+            // ANALYSE DU NOIR (Couche 3)
+            const pixels = ctxTop.getImageData(0, 0, cTop.width, cTop.height).data;
+            let transparent = 0;
+            for (let i = 3; i < pixels.length; i += 200) { if (pixels[i] === 0) transparent++; }
+            const progress = transparent / (pixels.length / 200);
+            
+            // On réduit le flou de l'IMAGE 1 (Couche 2)
+            const blurVal = Math.max(0, (1 - progress) * 20);
             cMid.style.filter = `blur(${blurVal}px)`;
-            cTop.style.opacity = remaining; // Le noir s'efface aussi en opacité
 
-            if (progress > 0.96) {
+            if (progress > 0.95) {
                 triggerFlash();
                 phase = 2;
                 isCoolingDown = true;
-                cTop.style.display = 'none';
-                cMid.style.filter = 'blur(0px)'; // Fixe l'image 1 à 100% net
+                cTop.style.display = 'none'; // On supprime le noir
+                cMid.style.filter = 'blur(0px)'; // On force la netteté de l'image 1
                 setTimeout(() => { isCoolingDown = false; }, 5000);
             }
         } else {
-            // L'Image 2 devient nette selon le grattage de l'IMAGE 1
-            const blurVal = Math.max(0, remaining * 30);
+            // ANALYSE DE L'IMAGE 1 (Couche 2)
+            const pixels = ctxMid.getImageData(0, 0, cMid.width, cMid.height).data;
+            let transparent = 0;
+            for (let i = 3; i < pixels.length; i += 200) { if (pixels[i] === 0) transparent++; }
+            const progress = transparent / (pixels.length / 200);
+            
+            // On réduit le flou du FOND (Couche 1)
+            const blurVal = Math.max(0, (1 - progress) * 30);
             container.style.filter = `blur(${blurVal}px)`;
         }
     }
@@ -124,7 +123,7 @@
     }
 
     function scratch(x, y) {
-        // En phase 1 on gratte le noir, en phase 2 on gratte l'image 1
+        // Sélection du contexte selon la phase
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
 
         if (brushSize < maxBrush) brushSize += growthSpeed;
@@ -145,39 +144,25 @@
             currentCtx.fill();
         }
         lastPoint = { x, y };
-        
         updateBlurLevels();
     }
 
     const handleInput = (e) => {
         if (!isDrawing) return;
         if (e.cancelable) e.preventDefault();
-        const rect = cMid.getBoundingClientRect();
+        const rect = (phase === 1 ? cTop : cMid).getBoundingClientRect();
         const pos = e.touches ? e.touches[0] : e;
         const x = pos.clientX - rect.left;
         const y = pos.clientY - rect.top;
         scratch(x, y);
     };
 
-    const start = (e) => { 
-        isDrawing = true; 
-        brushSize = minBrush; 
-        lastPoint = null; 
-        handleInput(e); 
-    };
-    
-    const stop = () => { 
-        isDrawing = false; 
-        lastPoint = null; 
-        brushSize = minBrush; 
-    };
+    const start = (e) => { isDrawing = true; brushSize = minBrush; lastPoint = null; handleInput(e); };
+    const stop = () => { isDrawing = false; lastPoint = null; brushSize = minBrush; };
 
-    // Attribution des événements
-    [cTop, cMid].forEach(c => {
-        c.addEventListener('mousedown', start);
-        c.addEventListener('touchstart', start, {passive: false});
-    });
-
+    // On écoute sur le container pour ne pas perdre l'event lors du changement de phase
+    container.addEventListener('mousedown', start);
+    container.addEventListener('touchstart', start, {passive: false});
     window.addEventListener('mousemove', handleInput);
     window.addEventListener('touchmove', handleInput, {passive: false});
     window.addEventListener('mouseup', stop);
