@@ -13,15 +13,15 @@
 
         #game-container {
             position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); /* IMAGE 2 TOUT AU FOND */
+            background-image: url('Imprim.jpg');
             background-size: cover; background-position: center;
-            border-radius: 8px; filter: blur(25px); /* Image 2 ultra floue au début */
-            transition: filter 0.4s ease;
+            border-radius: 8px; 
+            filter: blur(30px); /* Image 2 commence très floue */
         }
 
-        canvas { position: absolute; top: 0; left: 0; transition: filter 0.4s ease, opacity 0.8s ease; }
+        canvas { position: absolute; top: 0; left: 0; }
         
-        #canvas-layer-1 { z-index: 2; filter: blur(15px); } /* IMAGE 1 - Floue au début */
+        #canvas-layer-1 { z-index: 2; filter: blur(20px); } /* Image 1 commence très floue */
         #canvas-layer-top { z-index: 3; } /* VOILE NOIR */
 
         #flash {
@@ -56,9 +56,9 @@
     let brushSize = 4;
     let phase = 1; 
     
-    const growthSpeed = 0.15; // Vitesse d'agrandissement lente quand le doigt reste
+    const growthSpeed = 0.18; 
     const minBrush = 4;
-    const maxBrush = 70;
+    const maxBrush = 75;
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -68,24 +68,40 @@
             c.width = container.offsetWidth; 
             c.height = container.offsetHeight; 
         });
-        // On dessine l'image 1 sur son calque
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-        
-        // On dessine le voile noir opaque par-dessus tout
         ctxTop.fillStyle = "#000000";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
     };
 
-    function updateBlurLevels(progress) {
+    function updateBlurLevels() {
+        // On analyse le calque actif (Noir en phase 1, Image 1 en phase 2)
+        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        const pixels = currentCtx.getImageData(0, 0, cMid.width, cMid.height).data;
+        
+        let transparent = 0;
+        // On échantillonne pour ne pas faire ramer le mobile
+        for (let i = 3; i < pixels.length; i += 160) { 
+            if (pixels[i] === 0) transparent++; 
+        }
+        
+        const progress = transparent / (pixels.length / 160);
         const remaining = 1 - progress;
+
         if (phase === 1) {
-            // Plus on gratte le noir, plus l'Image 1 (Milieu) devient nette
-            cMid.style.filter = `blur(${remaining * 15}px)`;
-            // Le fond (Image 2) reste très flou en phase 1
-            container.style.filter = `blur(25px)`;
+            // L'Image 1 devient plus nette au fur et à mesure
+            const blurVal = Math.max(0, remaining * 20);
+            cMid.style.filter = `blur(${blurVal}px)`;
+            
+            if (progress > 0.96) {
+                triggerFlash();
+                phase = 2;
+                cTop.style.display = 'none';
+                cMid.style.filter = 'blur(0px)';
+            }
         } else {
-            // Phase 2 : L'image 1 est déjà nette, on fait déflouter le fond (Image 2)
-            container.style.filter = `blur(${remaining * 25}px)`;
+            // L'Image 2 (fond) devient plus nette au fur et à mesure
+            const blurVal = Math.max(0, remaining * 30);
+            container.style.filter = `blur(${blurVal}px)`;
         }
     }
 
@@ -94,30 +110,9 @@
         setTimeout(() => flash.classList.remove('flash-anim'), 700);
     }
 
-    function checkProgress() {
-        // On analyse le calque correspondant à la phase actuelle
-        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        const pixels = currentCtx.getImageData(0, 0, cMid.width, cMid.height).data;
-        let transparent = 0;
-        for (let i = 3; i < pixels.length; i += 150) { 
-            if (pixels[i] === 0) transparent++; 
-        }
-        const progress = transparent / (pixels.length / 150);
-
-        if (phase === 1 && progress > 0.97) {
-            triggerFlash();
-            phase = 2;
-            cTop.style.display = 'none'; // Le noir disparaît totalement
-            cMid.style.filter = 'blur(0px)'; // L'image 1 est figée nette
-        } else {
-            updateBlurLevels(progress);
-        }
-    }
-
     function scratch(x, y) {
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
 
-        // Le pinceau grossit si le doigt ne se lève pas
         if (brushSize < maxBrush) brushSize += growthSpeed;
 
         currentCtx.globalCompositeOperation = 'destination-out';
@@ -136,6 +131,9 @@
             currentCtx.fill();
         }
         lastPoint = { x, y };
+        
+        // Mise à jour visuelle immédiate
+        updateBlurLevels();
     }
 
     const handleInput = (e) => {
@@ -145,16 +143,12 @@
         const pos = e.touches ? e.touches[0] : e;
         const x = pos.clientX - rect.left;
         const y = pos.clientY - rect.top;
-        
         scratch(x, y);
-        
-        // On vérifie la progression régulièrement
-        if (Math.random() > 0.9) checkProgress();
     };
 
     const start = (e) => { 
         isDrawing = true; 
-        brushSize = minBrush; // Réinitialise tout petit au contact
+        brushSize = minBrush; 
         lastPoint = null; 
         handleInput(e); 
     };
@@ -162,11 +156,9 @@
     const stop = () => { 
         isDrawing = false; 
         lastPoint = null; 
-        brushSize = minBrush; // Réinitialise pour le prochain toucher
-        checkProgress(); 
+        brushSize = minBrush; 
     };
 
-    // Listeners sur les deux calques
     [cTop, cMid].forEach(c => {
         c.addEventListener('mousedown', start);
         c.addEventListener('touchstart', start, {passive: false});
