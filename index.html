@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>L'Énigme Proportionnelle</title>
+    <title>L'Énigme Finale</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
@@ -16,11 +16,13 @@
             background-image: url('Imprim.jpg');
             background-size: cover; background-position: center;
             border-radius: 8px; 
-            filter: blur(30px); /* Flou initial Image 2 */
+            filter: blur(30px); /* Fond ultra flou au début */
         }
 
         canvas { position: absolute; top: 0; left: 0; }
-        #canvas-layer-1 { z-index: 2; }
+        
+        /* On utilise le filtre CSS pour la proportionnalité du flou */
+        #canvas-layer-1 { z-index: 2; filter: blur(20px); } 
         #canvas-layer-top { z-index: 3; }
 
         #flash {
@@ -69,8 +71,7 @@
             c.height = container.offsetHeight; 
         });
         
-        // Initialisation Image 1 avec flou de départ important
-        ctxMid.filter = 'blur(20px)';
+        // On dessine l'image 1 normalement (le flou est géré par le CSS au-dessus)
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
         
         // Initialisation Voile Noir
@@ -81,11 +82,14 @@
     function updateBlurLevels() {
         if (isCoolingDown) return;
 
-        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        const pixels = currentCtx.getImageData(0, 0, cMid.width, cMid.height).data;
+        // On définit quel calque analyser pour calculer la progression
+        const activeCanvas = (phase === 1) ? cTop : cMid;
+        const activeCtx = (phase === 1) ? ctxTop : ctxMid;
         
+        const pixels = activeCtx.getImageData(0, 0, activeCanvas.width, activeCanvas.height).data;
         let transparent = 0;
-        const step = 200; // Échantillonnage pour fluidité
+        const step = 200; 
+
         for (let i = 3; i < pixels.length; i += step) { 
             if (pixels[i] === 0) transparent++; 
         }
@@ -94,31 +98,23 @@
         const remaining = 1 - progress;
 
         if (phase === 1) {
-            // IMAGE 1 : Calcul proportionnel strict
-            // On redessine l'image avec un flou qui diminue selon "remaining"
-            const currentBlur = remaining * 20; 
-            ctxMid.clearRect(0, 0, cMid.width, cMid.height);
-            ctxMid.filter = `blur(${currentBlur}px)`;
-            ctxMid.globalCompositeOperation = 'source-over';
-            ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-            
-            // On doit "ré-effacer" les zones déjà grattées sur ce calque car on vient de redessiner l'image
-            // Mais en phase 1, on ne gratte que le NOIR, donc pas besoin de ré-effacer ctxMid ici.
+            // L'Image 1 devient nette selon le grattage du NOIR
+            const blurVal = Math.max(0, remaining * 20);
+            cMid.style.filter = `blur(${blurVal}px)`;
+            cTop.style.opacity = remaining; // Le noir s'efface aussi en opacité
 
             if (progress > 0.96) {
                 triggerFlash();
                 phase = 2;
                 isCoolingDown = true;
                 cTop.style.display = 'none';
-                // Image 1 devient fixe et nette
-                ctxMid.filter = 'blur(0px)';
-                ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
+                cMid.style.filter = 'blur(0px)'; // Fixe l'image 1 à 100% net
                 setTimeout(() => { isCoolingDown = false; }, 5000);
             }
         } else {
-            // IMAGE 2 (Fond) : Calcul proportionnel strict
-            const blurFond = remaining * 30;
-            container.style.filter = `blur(${blurFond}px)`;
+            // L'Image 2 devient nette selon le grattage de l'IMAGE 1
+            const blurVal = Math.max(0, remaining * 30);
+            container.style.filter = `blur(${blurVal}px)`;
         }
     }
 
@@ -128,6 +124,7 @@
     }
 
     function scratch(x, y) {
+        // En phase 1 on gratte le noir, en phase 2 on gratte l'image 1
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
 
         if (brushSize < maxBrush) brushSize += growthSpeed;
@@ -175,6 +172,7 @@
         brushSize = minBrush; 
     };
 
+    // Attribution des événements
     [cTop, cMid].forEach(c => {
         c.addEventListener('mousedown', start);
         c.addEventListener('touchstart', start, {passive: false});
