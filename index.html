@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience Tactile - Version Finale</title>
+    <title>Expérience de Grattage Séquentiel</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
@@ -13,29 +13,28 @@
 
         #game-container {
             position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); /* IMAGE 2 */
+            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND FINAL) */
             background-size: cover; background-position: center;
             border-radius: 12px;
-            filter: blur(25px);
-            transition: filter 0.3s ease-out;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
         canvas { position: absolute; top: 0; left: 0; border-radius: 12px; }
-        #canvas-layer-1 { z-index: 2; filter: blur(25px); transition: filter 0.3s ease-out; } 
-        #canvas-layer-top { z-index: 3; }
+        #canvas-layer-1 { z-index: 2; } /* Image 1 */
+        #canvas-layer-top { z-index: 3; } /* Noir */
 
         #brush-cursor {
-            position: absolute; border: 1px solid rgba(255,255,255,0.7); 
+            position: absolute; border: 1.5px solid rgba(255,255,255,0.8); 
             border-radius: 50%; pointer-events: none; 
             transform: translate(-50%, -50%); display: none; 
             z-index: 100; mix-blend-mode: difference;
         }
 
         @keyframes shake {
-            0% { margin: 0; }
-            25% { margin: 1px -1px; }
-            50% { margin: -1px 1px; }
-            100% { margin: 0; }
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            25% { transform: translate(-51%, -49%) rotate(0.5deg); }
+            50% { transform: translate(-49%, -51%) rotate(-0.5deg); }
+            100% { transform: translate(-50%, -50%) rotate(0deg); }
         }
 
         #flash {
@@ -71,9 +70,9 @@
     let phase = 1; 
     let locked = false; 
     
-    const minSize = 2;  
-    const maxSize = 120; 
-    const growth = 0.02; // Croissance ultra lente (divisée par 5+)
+    const minSize = 2;
+    const maxSize = 110;
+    const growth = 0.03; // Croissance lente
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -88,62 +87,46 @@
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
     };
 
-    function calculateBlur(progress) {
-        // Logique demandée :
-        // < 25% gratté -> Très flou (25px)
-        // > 95% gratté -> Net (0px)
-        if (progress < 0.25) return 25;
-        if (progress > 0.95) return 0;
-        
-        // Calcul proportionnel entre 25% et 95%
-        let factor = (progress - 0.25) / (0.95 - 0.25);
-        return 25 * (1 - factor);
-    }
-
-    function updateVisuals() {
-        if (locked) return;
-
-        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        const pixels = currentCtx.getImageData(0, 0, cMid.width, cMid.height).data;
+    function checkCompletion(ctx, canvas) {
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let clear = 0;
-        const step = 500; 
+        const step = 400;
         for (let i = 3; i < pixels.length; i += step) {
             if (pixels[i] === 0) clear++;
         }
         const progress = clear / (pixels.length / step);
-        const blurVal = calculateBlur(progress);
 
-        if (phase === 1) {
-            cMid.style.filter = `blur(${blurVal}px)`;
-            if (progress > 0.95) completePhase1();
-        } else {
-            container.style.filter = `blur(${blurVal}px)`;
-            if (progress > 0.95) ctxMid.clearRect(0, 0, cMid.width, cMid.height);
+        if (progress > 0.95) {
+            if (phase === 1) {
+                completePhase1();
+            } else if (phase === 2) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
         }
     }
 
     function completePhase1() {
         locked = true;
         flash.classList.add('flash-anim');
-        ctxTop.clearRect(0, 0, cTop.width, cTop.height);
+        ctxTop.clearRect(0, 0, cTop.width, cTop.height); 
         cursor.style.display = 'none';
         
         setTimeout(() => {
             flash.classList.remove('flash-anim');
-            cTop.style.display = 'none';
-            phase = 2;
-            cMid.style.filter = "blur(0px)"; // Reset flou Image 1 pour Phase 2
+            cTop.style.display = 'none'; 
+            phase = 2; 
             setTimeout(() => { locked = false; }, 5000); 
         }, 800);
     }
 
     function scratch(x, y) {
         if (locked) return;
+        
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
 
         if (brushSize < maxSize) brushSize += growth;
         
-        // Tremblement dynamique
+        // Tremblement du curseur
         if (brushSize > 20) {
             cursor.style.animation = `shake 0.1s infinite`;
         } else {
@@ -169,16 +152,20 @@
         }
         lastPoint = { x, y };
 
-        if (Math.random() > 0.92) updateVisuals();
+        if (Math.random() > 0.9) checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
+    }
+
+    function getPos(e) {
+        const rect = container.getBoundingClientRect();
+        const pos = e.touches ? e.touches[0] : e;
+        return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
     }
 
     const onStart = (e) => {
         if (locked) return;
         isDrawing = true;
-        brushSize = minSize; 
-        const rect = container.getBoundingClientRect();
-        const pos = e.touches ? e.touches[0] : e;
-        const p = { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
+        brushSize = minSize;
+        const p = getPos(e);
         lastPoint = p;
         scratch(p.x, p.y);
     };
@@ -186,16 +173,18 @@
     const onMove = (e) => {
         if (!isDrawing || locked) return;
         if (e.cancelable) e.preventDefault();
-        const rect = container.getBoundingClientRect();
-        const pos = e.touches ? e.touches[0] : e;
-        scratch(pos.clientX - rect.left, pos.clientY - rect.top);
+        const p = getPos(e);
+        scratch(p.x, p.y);
     };
 
     const onStop = () => {
         isDrawing = false;
         lastPoint = null;
         cursor.style.display = 'none';
-        updateVisuals();
+        if (!locked) {
+            const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+            checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
+        }
     };
 
     container.addEventListener('mousedown', onStart);
@@ -204,6 +193,7 @@
     container.addEventListener('touchstart', onStart, {passive: false});
     window.addEventListener('touchmove', onMove, {passive: false});
     window.addEventListener('touchend', onStop);
+
 </script>
 </body>
 </html>
