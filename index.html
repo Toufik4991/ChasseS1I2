@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>L'Énigme Finale - 38%</title>
+    <title>Énigme Finale - Version Fluide</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: sans-serif; }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
         #game-container { 
             position: relative; width: 100vw; height: 100vh; 
             background: url('IMG1.jpeg') center/cover no-repeat; 
@@ -13,16 +13,10 @@
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #canvas-layer-1 { z-index: 2; } 
         #canvas-layer-top { z-index: 3; } 
-        #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; z-index: 10; pointer-events: none; }
-        .flash-anim { animation: flash-fade 0.6s ease-out; }
-        @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
-        .success-glow { animation: glow 2s infinite alternate; }
-        @keyframes glow { from { filter: brightness(1); } to { filter: brightness(1.3) contrast(1.1); } }
     </style>
 </head>
 <body>
 <div id="game-container">
-    <div id="flash"></div>
     <canvas id="canvas-layer-1"></canvas>
     <canvas id="canvas-layer-top"></canvas>
 </div>
@@ -32,13 +26,12 @@
     const ctxTop = cTop.getContext('2d');
     const cMid = document.getElementById('canvas-layer-1');
     const ctxMid = cMid.getContext('2d');
-    const flash = document.getElementById('flash');
     const container = document.getElementById('game-container');
 
     let isDrawing = false, phase = 1, locked = true, isReady = false;
     let regenActive = false; 
-    let brushSize = 15, lastPoint = null;
-    const maxSize = 80, growth = 0.12; 
+    let brushSize = 25, lastPoint = null;
+    const maxSize = 90; 
 
     const imgMid = new Image(); 
     imgMid.src = 'Imprim.jpg'; 
@@ -47,9 +40,6 @@
         init();
         setTimeout(() => { 
             locked = false; isReady = true; 
-            if(navigator.vibrate) navigator.vibrate(50); 
-            
-            // Activation de la régénération INTENSE après 2.3s de jeu effectif
             setTimeout(() => { regenActive = true; }, 2300);
         }, 2000);
         
@@ -73,47 +63,48 @@
     function checkCompletion() {
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
         const currentCanvas = (phase === 1) ? cTop : cMid;
+        
+        // On prend un échantillon plus petit pour être plus rapide et moins strict
         const pixels = currentCtx.getImageData(0, 0, currentCanvas.width, currentCanvas.height).data;
         let clear = 0;
-        const step = 4096;
-        for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
+        const step = 8192; // On saute plus de pixels pour lisser le résultat
+        
+        for (let i = 3; i < pixels.length; i += step) { 
+            if (pixels[i] < 150) clear++; // Si l'opacité est faible, on considère que c'est propre
+        }
+        
         const progress = clear / (pixels.length / step);
         
-        // Seuil ajusté à 38% pour la Phase 1 (le noir)
-        const targetThreshold = (phase === 1) ? 0.38 : 0.80;
+        // SEUIL À 25% : Beaucoup plus gratifiant visuellement
+        const threshold = (phase === 1) ? 0.25 : 0.70;
 
-        if (progress > targetThreshold) {
+        if (progress > threshold) {
             if (phase === 1) {
                 locked = true; regenActive = false;
-                if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
-                flash.classList.add('flash-anim');
-                setTimeout(() => { 
-                    ctxTop.clearRect(0,0,cTop.width, cTop.height);
-                    cTop.style.display = 'none'; phase = 2; locked = false; 
-                    flash.classList.remove('flash-anim');
-                    brushSize = 25;
-                }, 600);
+                ctxTop.clearRect(0,0,cTop.width, cTop.height);
+                cTop.style.display = 'none'; 
+                phase = 2; locked = false;
             } else {
                 ctxMid.clearRect(0, 0, cMid.width, cMid.height);
-                container.classList.add('success-glow');
-                if(navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
             }
         }
     }
 
     function scratch(x, y) {
         if (locked || !isReady) return;
-        if (isDrawing && navigator.vibrate) navigator.vibrate(12);
-
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-        if (brushSize < maxSize) brushSize += growth;
+        if (brushSize < maxSize) brushSize += 0.2;
+
         currentCtx.globalCompositeOperation = 'destination-out';
         currentCtx.lineWidth = brushSize; 
         currentCtx.lineCap = 'round';
         currentCtx.lineJoin = 'round';
+        
         if (lastPoint) { 
-            currentCtx.beginPath(); currentCtx.moveTo(lastPoint.x, lastPoint.y); 
-            currentCtx.lineTo(x, y); currentCtx.stroke(); 
+            currentCtx.beginPath(); 
+            currentCtx.moveTo(lastPoint.x, lastPoint.y); 
+            currentCtx.lineTo(x, y); 
+            currentCtx.stroke(); 
         }
         lastPoint = { x, y };
     }
@@ -124,11 +115,12 @@
         return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
     };
 
-    container.addEventListener('mousedown', (e) => { isDrawing = true; lastPoint = getPos(e); scratch(lastPoint.x, lastPoint.y); });
-    window.addEventListener('mousemove', (e) => { if (isDrawing) scratch(getPos(e).x, getPos(e).y); });
-    window.addEventListener('mouseup', () => { isDrawing = false; checkCompletion(); });
-    container.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawing = true; lastPoint = getPos(e); }, {passive: false});
-    container.addEventListener('touchmove', (e) => { e.preventDefault(); if (isDrawing) scratch(getPos(e).x, getPos(e).y); }, {passive: false});
+    container.addEventListener('touchstart', (e) => { 
+        e.preventDefault(); isDrawing = true; lastPoint = getPos(e); scratch(lastPoint.x, lastPoint.y);
+    }, {passive: false});
+    container.addEventListener('touchmove', (e) => { 
+        e.preventDefault(); if (isDrawing) scratch(getPos(e).x, getPos(e).y); 
+    }, {passive: false});
     container.addEventListener('touchend', () => { isDrawing = false; checkCompletion(); });
     window.addEventListener('resize', init);
 </script>
