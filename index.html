@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Énigme Finale - Version Fluide</title>
+    <title>L'Énigme Finale - Fluide</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
         #game-container { 
@@ -13,10 +13,14 @@
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #canvas-layer-1 { z-index: 2; } 
         #canvas-layer-top { z-index: 3; } 
+        #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; z-index: 10; pointer-events: none; }
+        .flash-anim { animation: flash-fade 0.6s ease-out; }
+        @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
     </style>
 </head>
 <body>
 <div id="game-container">
+    <div id="flash"></div>
     <canvas id="canvas-layer-1"></canvas>
     <canvas id="canvas-layer-top"></canvas>
 </div>
@@ -26,6 +30,7 @@
     const ctxTop = cTop.getContext('2d');
     const cMid = document.getElementById('canvas-layer-1');
     const ctxMid = cMid.getContext('2d');
+    const flash = document.getElementById('flash');
     const container = document.getElementById('game-container');
 
     let isDrawing = false, phase = 1, locked = true, isReady = false;
@@ -63,28 +68,39 @@
     function checkCompletion() {
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
         const currentCanvas = (phase === 1) ? cTop : cMid;
-        
-        // On prend un échantillon plus petit pour être plus rapide et moins strict
         const pixels = currentCtx.getImageData(0, 0, currentCanvas.width, currentCanvas.height).data;
         let clear = 0;
-        const step = 8192; // On saute plus de pixels pour lisser le résultat
+        const step = 8192; 
         
         for (let i = 3; i < pixels.length; i += step) { 
-            if (pixels[i] < 150) clear++; // Si l'opacité est faible, on considère que c'est propre
+            if (pixels[i] < 150) clear++; 
         }
         
         const progress = clear / (pixels.length / step);
-        
-        // SEUIL À 25% : Beaucoup plus gratifiant visuellement
         const threshold = (phase === 1) ? 0.25 : 0.70;
 
         if (progress > threshold) {
-            if (phase === 1) {
-                locked = true; regenActive = false;
-                ctxTop.clearRect(0,0,cTop.width, cTop.height);
-                cTop.style.display = 'none'; 
-                phase = 2; locked = false;
-            } else {
+            if (phase === 1 && !locked) {
+                locked = true; // VERROUILLAGE
+                regenActive = false;
+                if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
+                flash.classList.add('flash-anim');
+                
+                setTimeout(() => { 
+                    ctxTop.clearRect(0,0,cTop.width, cTop.height);
+                    cTop.style.display = 'none'; 
+                    phase = 2;
+                    flash.classList.remove('flash-anim');
+                    
+                    // ATTENTE DE 3 SECONDES AVANT DE POUVOIR REGRATTER
+                    setTimeout(() => {
+                        locked = false;
+                        brushSize = 25;
+                        if(navigator.vibrate) navigator.vibrate(50); // Petit signal pour dire "C'est reparti"
+                    }, 3000);
+
+                }, 600);
+            } else if (phase === 2 && !locked) {
                 ctxMid.clearRect(0, 0, cMid.width, cMid.height);
             }
         }
@@ -116,12 +132,25 @@
     };
 
     container.addEventListener('touchstart', (e) => { 
-        e.preventDefault(); isDrawing = true; lastPoint = getPos(e); scratch(lastPoint.x, lastPoint.y);
+        e.preventDefault(); 
+        if (!locked) {
+            isDrawing = true; 
+            lastPoint = getPos(e); 
+            scratch(lastPoint.x, lastPoint.y);
+        }
     }, {passive: false});
+
     container.addEventListener('touchmove', (e) => { 
-        e.preventDefault(); if (isDrawing) scratch(getPos(e).x, getPos(e).y); 
+        e.preventDefault(); 
+        if (isDrawing && !locked) scratch(getPos(e).x, getPos(e).y); 
     }, {passive: false});
-    container.addEventListener('touchend', () => { isDrawing = false; checkCompletion(); });
+
+    container.addEventListener('touchend', () => { 
+        isDrawing = false; 
+        checkCompletion(); 
+        lastPoint = null;
+    });
+
     window.addEventListener('resize', init);
 </script>
 </body>
