@@ -6,8 +6,13 @@
     <title>Expérience - Alerte Noire</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
-        #game-container { position: relative; width: 100vw; height: 100vh; background: url('Imprim.jpg') center/cover; }
-        canvas { position: absolute; top: 0; left: 0; }
+        #game-container { 
+            position: relative; width: 100vw; height: 100vh; 
+            background: url('Imprim.jpg') center/cover no-repeat; 
+        }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #canvas-layer-1 { z-index: 2; } /* IMG1 */
+        #canvas-layer-top { z-index: 3; } /* NOIR */
         #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; z-index: 10; pointer-events: none; }
         .flash-anim { animation: flash-fade 0.6s ease-out; }
         @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
@@ -34,18 +39,16 @@
     const img1 = new Image(); img1.src = 'IMG1.jpeg';
     img1.onload = () => {
         init();
-        // Délai initial de 2 secondes
         setTimeout(() => { 
             locked = false; 
             isReady = true; 
             if(navigator.vibrate) navigator.vibrate(50); 
         }, 2000);
         
-        // Boucle de régénération (Noir qui repousse)
+        // Régénération uniquement en Phase 1
         setInterval(() => {
             if (isReady && !locked && phase === 1) {
                 ctxTop.globalCompositeOperation = 'source-over';
-                // Augmente cette valeur (ex: 0.02) pour une repousse plus agressive
                 ctxTop.fillStyle = "rgba(0, 0, 0, 0.015)"; 
                 ctxTop.fillRect(0, 0, cTop.width, cTop.height);
             }
@@ -53,32 +56,44 @@
     };
 
     function init() {
-        [cTop, cMid].forEach(c => { c.width = window.innerWidth; c.height = window.innerHeight; });
+        cTop.width = cMid.width = window.innerWidth;
+        cTop.height = cMid.height = window.innerHeight;
+        
+        // Couche Top : NOIR
         ctxTop.fillStyle = "#000"; 
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+        
+        // Couche Mid : IMG1
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
     }
 
-    function checkCompletion(ctx, canvas) {
-        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    function checkCompletion() {
+        const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        const currentCanvas = (phase === 1) ? cTop : cMid;
+        
+        const pixels = currentCtx.getImageData(0, 0, currentCanvas.width, currentCanvas.height).data;
         let clear = 0;
         const step = 4096;
         for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
         
-        if (clear / (pixels.length / step) > 0.85) {
-            if (phase === 1 && !locked) {
+        const progress = clear / (pixels.length / step);
+
+        if (progress > 0.85) {
+            if (phase === 1) {
                 locked = true; 
                 if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
                 flash.classList.add('flash-anim');
                 setTimeout(() => { 
+                    ctxTop.clearRect(0,0,cTop.width, cTop.height);
                     cTop.style.display = 'none'; 
                     phase = 2; 
                     locked = false; 
                     flash.classList.remove('flash-anim');
-                    brushSize = 14; // Reset pour phase 2
+                    brushSize = 14;
                 }, 600);
             } else if (phase === 2) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Effacement complet de IMG1 pour voir Imprim.jpg en fond
+                ctxMid.clearRect(0, 0, cMid.width, cMid.height);
                 if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
             }
         }
@@ -87,11 +102,14 @@
     function scratch(x, y) {
         if (locked || !isReady) return;
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
+        
         if (brushSize < maxSize) brushSize += growth;
+        
         currentCtx.globalCompositeOperation = 'destination-out';
         currentCtx.lineWidth = brushSize; 
         currentCtx.lineCap = 'round';
         currentCtx.lineJoin = 'round';
+        
         if (lastPoint) { 
             currentCtx.beginPath(); 
             currentCtx.moveTo(lastPoint.x, lastPoint.y); 
@@ -102,22 +120,23 @@
     }
 
     const getPos = (e) => {
-        const rect = cTop.getBoundingClientRect();
+        const rect = container.getBoundingClientRect(); // container est global
         const pos = e.touches ? e.touches[0] : e;
         return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
     };
 
-    // Events avec stopPropagation pour éviter les bugs mobiles
+    const container = document.getElementById('game-container');
+
     const start = (e) => { isDrawing = true; lastPoint = getPos(e); scratch(lastPoint.x, lastPoint.y); };
     const move = (e) => { if (isDrawing) scratch(getPos(e).x, getPos(e).y); };
-    const end = () => { isDrawing = false; checkCompletion(phase === 1 ? ctxTop : ctxMid, phase === 1 ? cTop : cMid); };
+    const end = () => { isDrawing = false; checkCompletion(); };
 
-    window.addEventListener('mousedown', start);
+    container.addEventListener('mousedown', start);
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', end);
-    window.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
-    window.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, {passive: false});
-    window.addEventListener('touchend', end);
+    container.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
+    container.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, {passive: false});
+    container.addEventListener('touchend', end);
     window.addEventListener('resize', init);
 </script>
 </body>
