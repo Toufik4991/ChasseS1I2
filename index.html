@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>L'Énigme Finale</title>
+    <title>L'Énigme Finale - 38%</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; touch-action: none; font-family: sans-serif; }
         #game-container { 
@@ -16,8 +16,6 @@
         #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; z-index: 10; pointer-events: none; }
         .flash-anim { animation: flash-fade 0.6s ease-out; }
         @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
-        
-        /* Effet de pulsation finale */
         .success-glow { animation: glow 2s infinite alternate; }
         @keyframes glow { from { filter: brightness(1); } to { filter: brightness(1.3) contrast(1.1); } }
     </style>
@@ -40,7 +38,7 @@
     let isDrawing = false, phase = 1, locked = true, isReady = false;
     let regenActive = false; 
     let brushSize = 15, lastPoint = null;
-    const maxSize = 75, growth = 0.1;
+    const maxSize = 80, growth = 0.12; 
 
     const imgMid = new Image(); 
     imgMid.src = 'Imprim.jpg'; 
@@ -50,13 +48,15 @@
         setTimeout(() => { 
             locked = false; isReady = true; 
             if(navigator.vibrate) navigator.vibrate(50); 
-            setTimeout(() => { regenActive = true; }, 1500);
+            
+            // Activation de la régénération INTENSE après 2.3s de jeu effectif
+            setTimeout(() => { regenActive = true; }, 2300);
         }, 2000);
         
         setInterval(() => {
             if (isReady && !locked && phase === 1 && regenActive) {
                 ctxTop.globalCompositeOperation = 'source-over';
-                ctxTop.fillStyle = "rgba(0, 0, 0, 0.012)"; 
+                ctxTop.fillStyle = "rgba(0, 0, 0, 0.035)"; 
                 ctxTop.fillRect(0, 0, cTop.width, cTop.height);
             }
         }, 120);
@@ -75,10 +75,14 @@
         const currentCanvas = (phase === 1) ? cTop : cMid;
         const pixels = currentCtx.getImageData(0, 0, currentCanvas.width, currentCanvas.height).data;
         let clear = 0;
-        for (let i = 3; i < pixels.length; i += 4096) { if (pixels[i] === 0) clear++; }
-        const progress = clear / (pixels.length / 4096);
+        const step = 4096;
+        for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
+        const progress = clear / (pixels.length / step);
         
-        if (progress > (phase === 1 ? 0.45 : 0.80)) {
+        // Seuil ajusté à 38% pour la Phase 1 (le noir)
+        const targetThreshold = (phase === 1) ? 0.38 : 0.80;
+
+        if (progress > targetThreshold) {
             if (phase === 1) {
                 locked = true; regenActive = false;
                 if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
@@ -87,7 +91,7 @@
                     ctxTop.clearRect(0,0,cTop.width, cTop.height);
                     cTop.style.display = 'none'; phase = 2; locked = false; 
                     flash.classList.remove('flash-anim');
-                    brushSize = 20;
+                    brushSize = 25;
                 }, 600);
             } else {
                 ctxMid.clearRect(0, 0, cMid.width, cMid.height);
@@ -99,8 +103,7 @@
 
     function scratch(x, y) {
         if (locked || !isReady) return;
-        // Petite vibration haptique pendant le mouvement (très court pour ne pas saturer)
-        if (isDrawing && navigator.vibrate) navigator.vibrate(10);
+        if (isDrawing && navigator.vibrate) navigator.vibrate(12);
 
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
         if (brushSize < maxSize) brushSize += growth;
