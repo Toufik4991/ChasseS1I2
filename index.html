@@ -3,46 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience de Grattage Séquentiel</title>
+    <title>Expérience</title>
     <style>
         body {
             display: flex; justify-content: center; align-items: center;
-            height: 100vh; margin: 0; background-color: #050505;
+            height: 100vh; margin: 0; background-color: #000;
             overflow: hidden; touch-action: none;
         }
 
         #game-container {
-            position: relative; width: 320px; height: 450px;
-            background-image: url('Imprim.jpg'); /* IMAGE 2 (FOND FINAL) */
+            position: relative; 
+            width: 100vw; height: 100vh;
+            background-image: url('Imprim.jpg');
             background-size: cover; background-position: center;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        canvas { position: absolute; top: 0; left: 0; border-radius: 12px; }
-        #canvas-layer-1 { z-index: 2; } /* Image 1 */
-        #canvas-layer-top { z-index: 3; } /* Noir */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #canvas-layer-1 { z-index: 2; } 
+        #canvas-layer-top { z-index: 3; } 
 
         #brush-cursor {
-            position: absolute; border: 1.5px solid rgba(255,255,255,0.8); 
+            position: absolute; border: 1px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: none; 
             transform: translate(-50%, -50%); display: none; 
-            z-index: 100; mix-blend-mode: difference;
-        }
-
-        @keyframes shake {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            25% { transform: translate(-51%, -49%) rotate(0.5deg); }
-            50% { transform: translate(-49%, -51%) rotate(-0.5deg); }
-            100% { transform: translate(-50%, -50%) rotate(0deg); }
+            z-index: 100;
         }
 
         #flash {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: white; opacity: 0; z-index: 10; pointer-events: none;
-            border-radius: 12px;
         }
-        .flash-anim { animation: flash-fade 0.8s ease-out; }
+        .flash-anim { animation: flash-fade 0.6s ease-out; }
         @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
     </style>
 </head>
@@ -66,72 +57,81 @@
 
     let isDrawing = false;
     let lastPoint = null;
-    let brushSize = 2; 
+    let brushSize = 20; 
     let phase = 1; 
-    let locked = false; 
+    let locked = true; 
+    let isReady = false; 
     
-    const minSize = 2;
-    const maxSize = 110;
-    const growth = 0.03; // Croissance lente
+    const maxSize = 140; // Pinceau final plus large pour finir vite
+    const growth = 0.35; // Croissance plus rapide
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
 
     img1.onload = () => {
-        [cTop, cMid].forEach(c => { 
-            c.width = container.offsetWidth; 
-            c.height = container.offsetHeight; 
-        });
-        ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-        ctxTop.fillStyle = "black";
+        resize();
+        ctxTop.fillStyle = "#000";
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+        ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
+        
+        setTimeout(() => {
+            locked = false;
+            isReady = true;
+            if (navigator.vibrate) navigator.vibrate(40); 
+        }, 2000);
     };
+
+    function resize() {
+        [cTop, cMid].forEach(c => { 
+            c.width = window.innerWidth; 
+            c.height = window.innerHeight; 
+        });
+        if (phase === 1) {
+            ctxTop.fillStyle = "#000";
+            ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+        }
+        ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
+    }
 
     function checkCompletion(ctx, canvas) {
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let clear = 0;
-        const step = 400;
-        for (let i = 3; i < pixels.length; i += step) {
+        const totalChecked = pixels.length / 2048;
+        for (let i = 3; i < pixels.length; i += 2048) { 
             if (pixels[i] === 0) clear++;
         }
-        const progress = clear / (pixels.length / step);
+        const progress = clear / totalChecked;
 
-        if (progress > 0.95) {
-            if (phase === 1) {
-                completePhase1();
-            } else if (phase === 2) {
+        // Seuil à 85% pour un nettoyage plus indulgent
+        if (progress > 0.85) {
+            if (phase === 1 && !locked) completePhase1();
+            else if (phase === 2) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             }
         }
     }
 
     function completePhase1() {
         locked = true;
+        if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
         flash.classList.add('flash-anim');
-        ctxTop.clearRect(0, 0, cTop.width, cTop.height); 
-        cursor.style.display = 'none';
         
         setTimeout(() => {
+            ctxTop.clearRect(0, 0, cTop.width, cTop.height);
+            cTop.style.display = 'none';
+            phase = 2;
             flash.classList.remove('flash-anim');
-            cTop.style.display = 'none'; 
-            phase = 2; 
-            setTimeout(() => { locked = false; }, 5000); 
-        }, 800);
+            locked = false;
+            brushSize = 20;
+        }, 600);
     }
 
     function scratch(x, y) {
-        if (locked) return;
+        if (locked || !isReady) return;
         
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-
         if (brushSize < maxSize) brushSize += growth;
-        
-        // Tremblement du curseur
-        if (brushSize > 20) {
-            cursor.style.animation = `shake 0.1s infinite`;
-        } else {
-            cursor.style.animation = 'none';
-        }
 
         cursor.style.width = brushSize + 'px';
         cursor.style.height = brushSize + 'px';
@@ -151,8 +151,6 @@
             currentCtx.stroke();
         }
         lastPoint = { x, y };
-
-        if (Math.random() > 0.9) checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
     }
 
     function getPos(e) {
@@ -161,38 +159,33 @@
         return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
     }
 
-    const onStart = (e) => {
+    const start = (e) => {
         if (locked) return;
         isDrawing = true;
-        brushSize = minSize;
-        const p = getPos(e);
-        lastPoint = p;
-        scratch(p.x, p.y);
+        lastPoint = getPos(e);
+        scratch(lastPoint.x, lastPoint.y);
     };
 
-    const onMove = (e) => {
+    const move = (e) => {
         if (!isDrawing || locked) return;
-        if (e.cancelable) e.preventDefault();
         const p = getPos(e);
         scratch(p.x, p.y);
     };
 
-    const onStop = () => {
+    const stop = () => {
         isDrawing = false;
-        lastPoint = null;
         cursor.style.display = 'none';
-        if (!locked) {
-            const currentCtx = (phase === 1) ? ctxTop : ctxMid;
-            checkCompletion(currentCtx, phase === 1 ? cTop : cMid);
-        }
+        lastPoint = null;
+        if (isReady) checkCompletion((phase === 1 ? ctxTop : ctxMid), (phase === 1 ? cTop : cMid));
     };
 
-    container.addEventListener('mousedown', onStart);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onStop);
-    container.addEventListener('touchstart', onStart, {passive: false});
-    window.addEventListener('touchmove', onMove, {passive: false});
-    window.addEventListener('touchend', onStop);
+    container.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
+    container.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
+    container.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, {passive: false});
+    container.addEventListener('touchend', stop);
+    window.addEventListener('resize', resize);
 
 </script>
 </body>
