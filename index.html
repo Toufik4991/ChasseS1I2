@@ -34,24 +34,33 @@
     const container = document.getElementById('game-container');
 
     let isDrawing = false, phase = 1, locked = true, isReady = false;
+    let regenActive = false; // Nouvel état pour le délai de régénération
     let brushSize = 15, lastPoint = null;
     const maxSize = 75, growth = 0.1;
 
     const img1 = new Image(); img1.src = 'IMG1.jpeg';
     img1.onload = () => {
         init();
+        
+        // 1. Activation de l'interaction (2 secondes comme prévu)
         setTimeout(() => { 
             locked = false; 
             isReady = true; 
             if(navigator.vibrate) navigator.vibrate(50); 
+            
+            // 2. Activation de la régénération 1.5s APRES que le joueur a pu commencer
+            setTimeout(() => {
+                regenActive = true;
+            }, 1500);
+
         }, 2000);
         
         // Boucle de régénération
         setInterval(() => {
-            // On ne régénère QUE si on est en phase 1 (le noir)
-            if (isReady && !locked && phase === 1) {
+            // On ne régénère QUE si on est en phase 1 ET que le délai de 1.5s est passé
+            if (isReady && !locked && phase === 1 && regenActive) {
                 ctxTop.globalCompositeOperation = 'source-over';
-                ctxTop.fillStyle = "rgba(0, 0, 0, 0.012)"; // Légèrement plus doux
+                ctxTop.fillStyle = "rgba(0, 0, 0, 0.012)"; 
                 ctxTop.fillRect(0, 0, cTop.width, cTop.height);
             }
         }, 120);
@@ -75,14 +84,12 @@
         for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
         
         const progress = clear / (pixels.length / step);
-
-        // SEUIL À 60% POUR LA PHASE 1 (plus accessible avec la repousse)
-        // SEUIL À 80% POUR LA PHASE 2 (pour bien voir l'image finale)
         const targetThreshold = (phase === 1) ? 0.60 : 0.80;
 
         if (progress > targetThreshold) {
             if (phase === 1) {
                 locked = true; 
+                regenActive = false; // Stopper la régénération
                 if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
                 flash.classList.add('flash-anim');
                 setTimeout(() => { 
@@ -91,7 +98,7 @@
                     phase = 2; 
                     locked = false; 
                     flash.classList.remove('flash-anim');
-                    brushSize = 20; // Pinceau un peu plus gros pour la fin
+                    brushSize = 20;
                 }, 600);
             } else if (phase === 2) {
                 ctxMid.clearRect(0, 0, cMid.width, cMid.height);
