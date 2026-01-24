@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience - Défi Inversé</title>
+    <title>Expérience - Défi Équilibré 45%</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
         #game-container { 
@@ -38,26 +38,20 @@
     let brushSize = 15, lastPoint = null;
     const maxSize = 75, growth = 0.1;
 
-    // Chargement de l'image qui sera au milieu (Imprim.jpg désormais)
     const imgMid = new Image(); 
     imgMid.src = 'Imprim.jpg'; 
 
     imgMid.onload = () => {
         init();
-        
-        // Délai d'attente initial (2s)
         setTimeout(() => { 
             locked = false; 
             isReady = true; 
             if(navigator.vibrate) navigator.vibrate(50); 
-            
-            // Délai de grâce avant repousse du noir (1.5s)
             setTimeout(() => {
                 regenActive = true;
             }, 1500);
         }, 2000);
         
-        // Boucle de régénération (Phase 1 uniquement)
         setInterval(() => {
             if (isReady && !locked && phase === 1 && regenActive) {
                 ctxTop.globalCompositeOperation = 'source-over';
@@ -70,12 +64,8 @@
     function init() {
         cTop.width = cMid.width = window.innerWidth;
         cTop.height = cMid.height = window.innerHeight;
-        
-        // NOIR au dessus
         ctxTop.fillStyle = "#000"; 
         ctxTop.fillRect(0, 0, cTop.width, cTop.height);
-        
-        // Imprim.jpg au milieu
         ctxMid.drawImage(imgMid, 0, 0, cMid.width, cMid.height);
     }
 
@@ -89,7 +79,9 @@
         for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
         
         const progress = clear / (pixels.length / step);
-        const targetThreshold = (phase === 1) ? 0.60 : 0.80;
+        
+        // Seuil abaissé à 45% pour la Phase 1
+        const targetThreshold = (phase === 1) ? 0.45 : 0.80;
 
         if (progress > targetThreshold) {
             if (phase === 1) {
