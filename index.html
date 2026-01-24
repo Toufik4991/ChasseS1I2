@@ -3,191 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Expérience</title>
+    <title>Expérience - Alerte Noire</title>
     <style>
-        body {
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh; margin: 0; background-color: #000;
-            overflow: hidden; touch-action: none;
-        }
-
-        #game-container {
-            position: relative; 
-            width: 100vw; height: 100vh;
-            background-image: url('Imprim.jpg');
-            background-size: cover; background-position: center;
-        }
-
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #canvas-layer-1 { z-index: 2; } 
-        #canvas-layer-top { z-index: 3; } 
-
-        #brush-cursor {
-            position: absolute; border: 1.5px solid rgba(255,255,255,0.2); 
-            border-radius: 50%; pointer-events: none; 
-            transform: translate(-50%, -50%); display: none; 
-            z-index: 100;
-        }
-
-        #flash {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: white; opacity: 0; z-index: 10; pointer-events: none;
-        }
+        body { margin: 0; background: #000; overflow: hidden; touch-action: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; background: url('Imprim.jpg') center/cover; }
+        canvas { position: absolute; top: 0; left: 0; }
+        #flash { position: absolute; width: 100%; height: 100%; background: white; opacity: 0; z-index: 10; pointer-events: none; }
         .flash-anim { animation: flash-fade 0.6s ease-out; }
         @keyframes flash-fade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
     </style>
 </head>
 <body>
-
 <div id="game-container">
     <div id="flash"></div>
-    <div id="brush-cursor"></div>
     <canvas id="canvas-layer-1"></canvas>
     <canvas id="canvas-layer-top"></canvas>
 </div>
 
 <script>
-    const container = document.getElementById('game-container');
     const cTop = document.getElementById('canvas-layer-top');
     const ctxTop = cTop.getContext('2d');
     const cMid = document.getElementById('canvas-layer-1');
     const ctxMid = cMid.getContext('2d');
     const flash = document.getElementById('flash');
-    const cursor = document.getElementById('brush-cursor');
 
-    let isDrawing = false;
-    let lastPoint = null;
-    let brushSize = 12; 
-    let phase = 1; 
-    let locked = true; 
-    let isReady = false; 
-    
-    // CONFIGURATION COMPLEXE :
-    const maxSize = 65; // Pinceau bridé (plus de travail manuel)
-    const growth = 0.08; // Croissance lente
-    const completionThreshold = 0.85; // Seuil indulgent (85%)
+    let isDrawing = false, phase = 1, locked = true, isReady = false;
+    let brushSize = 14, lastPoint = null;
+    const maxSize = 70, growth = 0.08;
 
-    const img1 = new Image();
-    img1.src = 'IMG1.jpeg';
-
+    const img1 = new Image(); img1.src = 'IMG1.jpeg';
     img1.onload = () => {
-        resize();
-        ctxTop.fillStyle = "#000";
-        ctxTop.fillRect(0, 0, cTop.width, cTop.height);
-        ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
-        
-        setTimeout(() => {
-            locked = false;
-            isReady = true;
-            if (navigator.vibrate) navigator.vibrate(40); 
+        init();
+        // Délai initial de 2 secondes
+        setTimeout(() => { 
+            locked = false; 
+            isReady = true; 
+            if(navigator.vibrate) navigator.vibrate(50); 
         }, 2000);
+        
+        // Boucle de régénération (Noir qui repousse)
+        setInterval(() => {
+            if (isReady && !locked && phase === 1) {
+                ctxTop.globalCompositeOperation = 'source-over';
+                // Augmente cette valeur (ex: 0.02) pour une repousse plus agressive
+                ctxTop.fillStyle = "rgba(0, 0, 0, 0.015)"; 
+                ctxTop.fillRect(0, 0, cTop.width, cTop.height);
+            }
+        }, 120);
     };
 
-    function resize() {
-        [cTop, cMid].forEach(c => { 
-            c.width = window.innerWidth; 
-            c.height = window.innerHeight; 
-        });
-        if (phase === 1) {
-            ctxTop.fillStyle = "#000";
-            ctxTop.fillRect(0, 0, cTop.width, cTop.height);
-        }
+    function init() {
+        [cTop, cMid].forEach(c => { c.width = window.innerWidth; c.height = window.innerHeight; });
+        ctxTop.fillStyle = "#000"; 
+        ctxTop.fillRect(0, 0, cTop.width, cTop.height);
         ctxMid.drawImage(img1, 0, 0, cMid.width, cMid.height);
     }
 
     function checkCompletion(ctx, canvas) {
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let clear = 0;
-        const step = 2048; 
-        for (let i = 3; i < pixels.length; i += step) { 
-            if (pixels[i] === 0) clear++;
-        }
-        const progress = clear / (pixels.length / step);
-
-        if (progress > completionThreshold) {
-            if (phase === 1 && !locked) completePhase1();
-            else if (phase === 2) {
+        const step = 4096;
+        for (let i = 3; i < pixels.length; i += step) { if (pixels[i] === 0) clear++; }
+        
+        if (clear / (pixels.length / step) > 0.85) {
+            if (phase === 1 && !locked) {
+                locked = true; 
+                if(navigator.vibrate) navigator.vibrate([60, 40, 60]);
+                flash.classList.add('flash-anim');
+                setTimeout(() => { 
+                    cTop.style.display = 'none'; 
+                    phase = 2; 
+                    locked = false; 
+                    flash.classList.remove('flash-anim');
+                    brushSize = 14; // Reset pour phase 2
+                }, 600);
+            } else if (phase === 2) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
             }
         }
     }
 
-    function completePhase1() {
-        locked = true;
-        if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
-        flash.classList.add('flash-anim');
-        
-        setTimeout(() => {
-            ctxTop.clearRect(0, 0, cTop.width, cTop.height);
-            cTop.style.display = 'none';
-            phase = 2;
-            flash.classList.remove('flash-anim');
-            locked = false;
-            brushSize = 12;
-        }, 600);
-    }
-
     function scratch(x, y) {
         if (locked || !isReady) return;
-        
         const currentCtx = (phase === 1) ? ctxTop : ctxMid;
         if (brushSize < maxSize) brushSize += growth;
-
-        cursor.style.width = brushSize + 'px';
-        cursor.style.height = brushSize + 'px';
-        cursor.style.left = x + 'px';
-        cursor.style.top = y + 'px';
-        cursor.style.display = 'block';
-
         currentCtx.globalCompositeOperation = 'destination-out';
-        currentCtx.lineJoin = 'round';
+        currentCtx.lineWidth = brushSize; 
         currentCtx.lineCap = 'round';
-        currentCtx.lineWidth = brushSize;
-
-        if (lastPoint) {
-            currentCtx.beginPath();
-            currentCtx.moveTo(lastPoint.x, lastPoint.y);
-            currentCtx.lineTo(x, y);
-            currentCtx.stroke();
+        currentCtx.lineJoin = 'round';
+        if (lastPoint) { 
+            currentCtx.beginPath(); 
+            currentCtx.moveTo(lastPoint.x, lastPoint.y); 
+            currentCtx.lineTo(x, y); 
+            currentCtx.stroke(); 
         }
         lastPoint = { x, y };
     }
 
-    function getPos(e) {
-        const rect = container.getBoundingClientRect();
+    const getPos = (e) => {
+        const rect = cTop.getBoundingClientRect();
         const pos = e.touches ? e.touches[0] : e;
         return { x: pos.clientX - rect.left, y: pos.clientY - rect.top };
-    }
-
-    const start = (e) => {
-        if (locked) return;
-        isDrawing = true;
-        lastPoint = getPos(e);
-        scratch(lastPoint.x, lastPoint.y);
     };
 
-    const move = (e) => {
-        if (!isDrawing || locked) return;
-        const p = getPos(e);
-        scratch(p.x, p.y);
-    };
+    // Events avec stopPropagation pour éviter les bugs mobiles
+    const start = (e) => { isDrawing = true; lastPoint = getPos(e); scratch(lastPoint.x, lastPoint.y); };
+    const move = (e) => { if (isDrawing) scratch(getPos(e).x, getPos(e).y); };
+    const end = () => { isDrawing = false; checkCompletion(phase === 1 ? ctxTop : ctxMid, phase === 1 ? cTop : cMid); };
 
-    const stop = () => {
-        isDrawing = false;
-        cursor.style.display = 'none';
-        lastPoint = null;
-        if (isReady) checkCompletion((phase === 1 ? ctxTop : ctxMid), (phase === 1 ? cTop : cMid));
-    };
-
-    container.addEventListener('mousedown', start);
+    window.addEventListener('mousedown', start);
     window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', stop);
-    container.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
-    container.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, {passive: false});
-    container.addEventListener('touchend', stop);
-    window.addEventListener('resize', resize);
-
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, {passive: false});
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, {passive: false});
+    window.addEventListener('touchend', end);
+    window.addEventListener('resize', init);
 </script>
 </body>
 </html>
