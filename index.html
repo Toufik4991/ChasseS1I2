@@ -23,7 +23,7 @@
         #canvas-layer-top { z-index: 3; } 
 
         #brush-cursor {
-            position: absolute; border: 1px solid rgba(255,255,255,0.15); 
+            position: absolute; border: 1.5px solid rgba(255,255,255,0.2); 
             border-radius: 50%; pointer-events: none; 
             transform: translate(-50%, -50%); display: none; 
             z-index: 100;
@@ -57,13 +57,15 @@
 
     let isDrawing = false;
     let lastPoint = null;
-    let brushSize = 20; 
+    let brushSize = 12; 
     let phase = 1; 
     let locked = true; 
     let isReady = false; 
     
-    const maxSize = 140; // Pinceau final plus large pour finir vite
-    const growth = 0.35; // Croissance plus rapide
+    // CONFIGURATION COMPLEXE :
+    const maxSize = 65; // Pinceau bridé (plus de travail manuel)
+    const growth = 0.08; // Croissance lente
+    const completionThreshold = 0.85; // Seuil indulgent (85%)
 
     const img1 = new Image();
     img1.src = 'IMG1.jpeg';
@@ -96,14 +98,13 @@
     function checkCompletion(ctx, canvas) {
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let clear = 0;
-        const totalChecked = pixels.length / 2048;
-        for (let i = 3; i < pixels.length; i += 2048) { 
+        const step = 2048; 
+        for (let i = 3; i < pixels.length; i += step) { 
             if (pixels[i] === 0) clear++;
         }
-        const progress = clear / totalChecked;
+        const progress = clear / (pixels.length / step);
 
-        // Seuil à 85% pour un nettoyage plus indulgent
-        if (progress > 0.85) {
+        if (progress > completionThreshold) {
             if (phase === 1 && !locked) completePhase1();
             else if (phase === 2) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -123,7 +124,7 @@
             phase = 2;
             flash.classList.remove('flash-anim');
             locked = false;
-            brushSize = 20;
+            brushSize = 12;
         }, 600);
     }
 
